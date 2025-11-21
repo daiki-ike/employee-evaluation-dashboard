@@ -1,0 +1,469 @@
+/* EvaluationSheet.css - Modern & Clean Redesign */
+
+.evaluation-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: 'Inter', sans-serif;
+  color: var(--text-primary);
+}
+
+/* Header Section */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.dashboard-header h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.back-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.2s;
+}
+
+.back-link:hover {
+  color: var(--accent-primary);
+}
+
+/* Employee Selector */
+.employee-selector {
+  margin-bottom: 32px;
+  background: var(--bg-surface);
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.employee-selector label {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.employee-select {
+  padding: 10px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  min-width: 250px;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.employee-select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+}
+
+/* Employee Header Info */
+.employee-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 24px;
+}
+
+.employee-info h3 {
+  font-size: 1.75rem;
+  margin: 0 0 4px 0;
+  color: var(--text-primary);
+}
+
+.employee-info p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.total-score {
+  text-align: right;
+  background: var(--bg-surface);
+  padding: 12px 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
+}
+
+.score-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.score-value {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--accent-primary);
+  line-height: 1;
+}
+
+/* Summary Cards */
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.summary-card {
+  background: var(--bg-surface);
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.summary-card h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.summary-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.summary-value.positive {
+  color: var(--accent-danger);
+}
+
+.summary-value.negative {
+  color: var(--accent-primary);
+}
+
+/* Legend */
+.legend-container {
+  display: flex;
+  gap: 32px;
+  margin-bottom: 24px;
+  background: var(--bg-surface);
+  padding: 16px 24px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  font-size: 0.85rem;
+}
+
+.legend-item h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.legend-row,
+.legend-desc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.color-box {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.color-box.self {
+  background-color: #805ad5;
+}
+
+.color-box.manager {
+  background-color: #48bb78;
+}
+
+.diff-example {
+  font-weight: bold;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.diff-example.positive {
+  background: var(--badge-positive-bg);
+  color: var(--badge-positive-text);
+}
+
+.diff-example.negative {
+  background: var(--badge-negative-bg);
+  color: var(--badge-negative-text);
+}
+
+.diff-example.zero {
+  background: var(--badge-neutral-bg);
+  color: var(--badge-neutral-text);
+}
+
+/* Table Styles - The Core Redesign */
+.evaluation-table-container {
+  background: var(--bg-surface);
+  border-radius: 16px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.evaluation-table-container h3 {
+  padding: 20px 24px;
+  margin: 0;
+  font-size: 1.1rem;
+  border-bottom: 1px solid var(--border-color);
+  background: #FAFAFA;
+}
+
+.evaluation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.evaluation-table th {
+  background: #FAFAFA;
+  color: var(--text-secondary);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  padding: 16px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.evaluation-table td {
+  padding: 16px 12px;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: top;
+  /* Important for merged cells */
+  color: var(--text-primary);
+}
+
+.evaluation-table tr:last-child td {
+  border-bottom: none;
+}
+
+.evaluation-table tr:hover td {
+  background-color: #F7FAFC;
+}
+
+/* Category Cells */
+.category-cell {
+  background-color: var(--bg-surface);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.no-cell {
+  color: var(--text-secondary);
+  font-family: monospace;
+  font-size: 1rem;
+  text-align: center;
+}
+
+.major-cell {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  min-width: 180px;
+  /* Slightly wider */
+  text-align: left;
+  vertical-align: top;
+}
+
+.major-title {
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  font-size: 1.0rem;
+  display: block;
+}
+
+.major-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  /* Remove boxy style */
+  background-color: transparent;
+  border: none;
+  border-left: 3px solid var(--accent-light);
+  /* Subtle accent */
+  padding: 2px 0 2px 10px;
+  /* Indent with padding */
+  margin-top: 8px;
+  border-radius: 0;
+}
+
+.minor-cell {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.criteria-cell {
+  line-height: 1.6;
+  min-width: 300px;
+}
+
+/* Score Cells */
+.score-cell {
+  text-align: center;
+}
+
+.score-text {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  min-height: 1.2em;
+  /* Prevent layout shift */
+}
+
+.score-num {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.score-text {
+  font-size: 0.9rem;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: keep-all;
+  /* Try to keep words together */
+  margin-bottom: 4px;
+}
+
+/* Difference Badge */
+.diff-cell {
+  text-align: center;
+  vertical-align: middle !important;
+}
+
+.diff-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  min-width: 50px;
+}
+
+.diff-badge.positive {
+  background-color: var(--badge-positive-bg);
+  color: var(--badge-positive-text);
+}
+
+.diff-badge.negative {
+  background-color: var(--badge-negative-bg);
+  color: var(--badge-negative-text);
+}
+
+.diff-badge.neutral {
+  background-color: var(--badge-neutral-bg);
+  color: var(--badge-neutral-text);
+}
+
+/* Chart Cell */
+.chart-cell {
+  vertical-align: middle !important;
+  padding-right: 24px;
+}
+
+.mini-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  background: transparent;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 4px;
+  opacity: 0.9;
+}
+
+.bar.self {
+  background-color: #805ad5;
+}
+
+.bar.manager {
+  background-color: #48bb78;
+}
+
+/* No Data / No Selection */
+.no-data,
+.no-selection {
+  text-align: center;
+  padding: 60px 20px;
+  background: var(--bg-surface);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.upload-link {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 10px 20px;
+  background: var(--accent-primary);
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .evaluation-container {
+    padding: 10px;
+  }
+
+  .employee-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .total-score {
+    width: 100%;
+    text-align: center;
+  }
+
+  .legend-container {
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .evaluation-table th,
+  .evaluation-table td {
+    padding: 12px 8px;
+  }
+}

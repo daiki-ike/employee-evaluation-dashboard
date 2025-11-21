@@ -1,0 +1,86 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Modern Color Palette */
+  --bg-primary: #F7F9FB;
+  --bg-surface: #FFFFFF;
+  --text-primary: #1A202C;
+  --text-secondary: #718096;
+  --border-color: #E2E8F0;
+
+  /* Accents */
+  --accent-primary: #3182ce;
+  --accent-success: #38A169;
+  --accent-danger: #E53E3E;
+
+  /* Badges */
+  --badge-positive-bg: #FED7D7;
+  --badge-positive-text: #9B2C2C;
+  --badge-negative-bg: #BEE3F8;
+  --badge-negative-text: #2C5282;
+  --badge-neutral-bg: #EDF2F7;
+  --badge-neutral-text: #4A5568;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.App {
+  min-height: 100vh;
+}
+
+.app-header {
+  background: white;
+  padding: 15px 30px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.app-header h1 {
+  margin: 0;
+  font-size: 24px;
+  color: #333;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.user-info span {
+  color: #666;
+  font-weight: 500;
+}
+
+.logout-btn {
+  padding: 8px 16px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.3s;
+}
+
+.logout-btn:hover {
+  background: #c82333;
+}

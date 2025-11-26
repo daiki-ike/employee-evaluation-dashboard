@@ -1,14 +1,13 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchSheetData, convertToStructuredData, mergeEvaluationData } from '../utils/sheetsApi'
+import { fetchSheetData, convertToStructuredData, mergeEvaluationData, fetchAllSalesSheets } from '../utils/sheetsApi'
 import './DataUpload.css'
 
 const DataUpload = ({ onUpload }) => {
   const navigate = useNavigate()
 
   // 売上データ
-  const [salesUrl, setSalesUrl] = useState('')
-  const [salesSheetName, setSalesSheetName] = useState('')
+  const [salesUrl, setSalesUrl] = useState('https://docs.google.com/spreadsheets/d/1BbjL9FuF3bdItknQGIWQFO3R_7pehAVIHHh1-A9-xYc/edit?usp=sharing')
 
   // 評価マスター
   const [masterUrl, setMasterUrl] = useState('https://docs.google.com/spreadsheets/d/1xi024jxqTOmta-iABi3IuCPv718Y0EBBfESSke9K94c/edit?usp=sharing')
@@ -28,10 +27,29 @@ const DataUpload = ({ onUpload }) => {
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const [debugSalesData, setDebugSalesData] = useState('')
+
+  const checkSalesStorage = () => {
+    const data = localStorage.getItem('salesRanking')
+    if (data) {
+      const parsed = JSON.parse(data)
+      const info = {
+        overallCount: parsed.overall?.length || 0,
+        tokyoCount: parsed.tokyo?.length || 0,
+        osakaCount: parsed.osaka?.length || 0,
+        nagoyaCount: parsed.nagoya?.length || 0,
+        hatakeyamaCount: parsed.hatakeyama?.length || 0,
+        firstOverallRecord: parsed.overall?.[0] || 'No record'
+      }
+      setDebugSalesData(JSON.stringify(info, null, 2))
+    } else {
+      setDebugSalesData('No data found in localStorage')
+    }
+  }
 
   const handleUploadSales = async () => {
-    if (!salesUrl || !salesSheetName) {
-      setMessage('売上データのURLとシート名を入力してください')
+    if (!salesUrl) {
+      setMessage('売上データのURLを入力してください')
       return
     }
 
@@ -39,10 +57,21 @@ const DataUpload = ({ onUpload }) => {
     setMessage('')
 
     try {
-      const rawData = await fetchSheetData(salesUrl, salesSheetName)
-      const structuredData = convertToStructuredData(rawData, 'sales')
-      onUpload('sales', structuredData)
-      setMessage('売上・利益データを読み込みました')
+      const salesData = await fetchAllSalesSheets(salesUrl)
+
+      if (salesData.errors.length > 0) {
+        console.warn('Some sheets failed to load:', salesData.errors)
+      }
+
+      console.log('DataUpload: salesData before onUpload:', salesData)
+      onUpload('salesRanking', salesData)
+
+      const totalRecords = salesData.overall.length + salesData.tokyo.length +
+        salesData.osaka.length + salesData.nagoya.length +
+        salesData.hatakeyama.length
+
+      console.log('DataUpload: totalRecords calculated:', totalRecords)
+      setMessage(`売上ランキングデータを読み込みました (全${totalRecords}件)`)
     } catch (error) {
       setMessage(`エラー: ${error.message}`)
     } finally {
@@ -111,11 +140,16 @@ const DataUpload = ({ onUpload }) => {
         <h3>📊 現在読み込まれているデータ</h3>
         <div className="data-viewer-grid">
           <div className="data-viewer-card">
-            <div className="data-viewer-label">売上・利益データ</div>
+            <div className="data-viewer-label">売上ランキングデータ</div>
             <div className="data-viewer-value">
               {(() => {
-                const data = localStorage.getItem('salesData')
-                return data ? `${JSON.parse(data).length} 件` : '未読み込み'
+                const data = localStorage.getItem('salesRanking')
+                if (!data) return '未読み込み'
+                const parsed = JSON.parse(data)
+                const total = (parsed.overall?.length || 0) + (parsed.tokyo?.length || 0) +
+                  (parsed.osaka?.length || 0) + (parsed.nagoya?.length || 0) +
+                  (parsed.hatakeyama?.length || 0)
+                return `${total} 件 (5シート)`
               })()}
             </div>
           </div>
@@ -157,7 +191,10 @@ const DataUpload = ({ onUpload }) => {
       </div>
 
       <div className="upload-section">
-        <h3>1. 売上・利益データ</h3>
+        <h3>1. 売上ランキングデータ（5シート一括読み込み）</h3>
+        <p className="section-description">
+          全体、東京、大阪、名古屋、畠山部の5シートを一度に読み込みます
+        </p>
         <div className="form-group">
           <label>スプレッドシートURL</label>
           <input
@@ -167,17 +204,8 @@ const DataUpload = ({ onUpload }) => {
             placeholder="https://docs.google.com/spreadsheets/d/..."
           />
         </div>
-        <div className="form-group">
-          <label>シート名</label>
-          <input
-            type="text"
-            value={salesSheetName}
-            onChange={(e) => setSalesSheetName(e.target.value)}
-            placeholder="例: 売上データ"
-          />
-        </div>
         <button onClick={handleUploadSales} disabled={loading} className="upload-btn">
-          {loading ? '読み込み中...' : '売上データを読み込む'}
+          {loading ? '読み込み中...' : '売上ランキングデータを読み込む'}
         </button>
       </div>
 
@@ -323,7 +351,7 @@ const DataUpload = ({ onUpload }) => {
           {loading ? '読み込み中...' : '評価データを読み込む（4シート統合）'}
         </button>
       </div>
-    </div>
+    </div >
   )
 }
 

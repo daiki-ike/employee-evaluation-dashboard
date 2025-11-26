@@ -502,3 +502,137 @@ export const mergeEvaluationData = (masterData, selfData, managerData, scoreData
 
   return employees
 }
+
+// 売上ランキングデータの変換
+export const convertSalesRankingData = (rawData, sheetName) => {
+  console.log(`convertSalesRankingData called for sheet: ${sheetName}`)
+
+  if (!rawData || rawData.length < 2) {
+    console.log(`Returning empty array - insufficient data`)
+    return []
+  }
+
+  // ヘッダー行を自動検出（「売上ランキング」または「順位」を含む行）
+  let headerIndex = rawData.findIndex(row =>
+    row.some(cell => {
+      const cellStr = String(cell || '').trim()
+      return cellStr === '売上ランキング' || cellStr === '順位' || cellStr.includes('ランキング')
+    })
+  )
+
+  // ヘッダーが見つからない場合は1行目をヘッダーとする
+  if (headerIndex === -1) {
+    headerIndex = 0
+  }
+
+  console.log(`[Debug] ${sheetName} header found at row: ${headerIndex + 1}`)
+
+  // ヘッダーの次の行からデータとして扱う
+  const dataRows = rawData.slice(headerIndex + 1)
+  console.log(`[Debug] ${sheetName} dataRows length: ${dataRows.length}`)
+
+  // 数値文字列（"¥ 1,000" や "10.5%"）をパースするヘルパー関数
+  const parseNumericString = (str) => {
+    if (typeof str === 'number') return str
+    if (!str) return 0
+    // 全角・半角の円記号、カンマ、パーセント、空白を削除
+    const cleanStr = str.toString().replace(/[¥￥,%\s]/g, '')
+    const num = parseFloat(cleanStr)
+    return isNaN(num) ? 0 : num
+  }
+
+  const result = dataRows
+    .filter(row => {
+      const isValid = row && row.length > 0
+      if (!isValid) console.log(`[Debug] Filtered out empty row in ${sheetName}`)
+      return isValid
+    })
+    .map((row, index) => {
+      // A列が空の場合、実際のデータはB列(index=1)から始まる
+      const item = {
+        rank: parseInt(row[1]) || 0,      // B列
+        name: String(row[2] || '').trim(), // C列
+        sales: parseNumericString(row[3]), // D列
+        share: parseNumericString(row[4]), // E列（全体内%）
+        profit: 0,
+        achievement: 0,
+        yoy: 0,
+        department: sheetName
+      }
+      if (index === 0) console.log(`[Debug] ${sheetName} first mapped item:`, item)
+      return item
+    })
+    .filter(item => {
+      const hasName = item.name !== ''
+      if (!hasName) console.log(`[Debug] Filtered out item without name in ${sheetName}`)
+      return hasName
+    })
+
+  console.log(`convertSalesRankingData result for ${sheetName}: ${result.length} records`)
+
+  return result
+}
+
+// 複数シートから売上データを読み込む
+export const fetchAllSalesSheets = async (spreadsheetUrl) => {
+  const sheetNames = ['全体', '東京', '大阪', '名古屋', '畠山部']
+
+  try {
+    // 全シートを並行して読み込み
+    const results = await Promise.all(
+      sheetNames.map(async (sheetName) => {
+        try {
+          const rawData = await fetchSheetData(spreadsheetUrl, sheetName)
+          const convertedData = convertSalesRankingData(rawData, sheetName)
+          return { sheetName, data: convertedData, success: true }
+        } catch (error) {
+          console.error(`Error fetching ${sheetName}:`, error)
+          return { sheetName, data: [], success: false, error: error.message }
+        }
+      })
+    )
+
+    // 結果を整形
+    const salesData = {
+      overall: [],
+      tokyo: [],
+      osaka: [],
+      nagoya: [],
+      hatakeyama: [],
+      errors: []
+    }
+
+    results.forEach(result => {
+      if (result.success) {
+        switch (result.sheetName) {
+          case '全体':
+            salesData.overall = result.data
+            break
+          case '東京':
+            salesData.tokyo = result.data
+            break
+          case '大阪':
+            salesData.osaka = result.data
+            break
+          case '名古屋':
+            salesData.nagoya = result.data
+            break
+          case '畠山部':
+            salesData.hatakeyama = result.data
+            break
+        }
+      } else {
+        salesData.errors.push({
+          sheet: result.sheetName,
+          error: result.error
+        })
+      }
+    })
+
+    return salesData
+  } catch (error) {
+    console.error('Error fetching all sales sheets:', error)
+    throw error
+  }
+}
+

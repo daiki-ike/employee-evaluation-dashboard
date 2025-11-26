@@ -9,6 +9,7 @@ import './App.css'
 function App() {
   const [user, setUser] = useState(null)
   const [salesData, setSalesData] = useState(null)
+  const [salesRanking, setSalesRanking] = useState(null)
   const [evaluationMaster, setEvaluationMaster] = useState(null)
   const [evaluationData, setEvaluationData] = useState(null)
 
@@ -21,10 +22,12 @@ function App() {
 
     // データを復元
     const savedSalesData = localStorage.getItem('salesData')
+    const savedSalesRanking = localStorage.getItem('salesRanking')
     const savedEvaluationMaster = localStorage.getItem('evaluationMaster')
     const savedEvaluationData = localStorage.getItem('evaluationData')
 
     if (savedSalesData) setSalesData(JSON.parse(savedSalesData))
+    if (savedSalesRanking) setSalesRanking(JSON.parse(savedSalesRanking))
     if (savedEvaluationMaster) setEvaluationMaster(JSON.parse(savedEvaluationMaster))
     if (savedEvaluationData) setEvaluationData(JSON.parse(savedEvaluationData))
   }, [])
@@ -43,6 +46,9 @@ function App() {
     if (type === 'sales') {
       setSalesData(data)
       localStorage.setItem('salesData', JSON.stringify(data))
+    } else if (type === 'salesRanking') {
+      setSalesRanking(data)
+      localStorage.setItem('salesRanking', JSON.stringify(data))
     } else if (type === 'evaluationMaster') {
       setEvaluationMaster(data)
       localStorage.setItem('evaluationMaster', JSON.stringify(data))
@@ -72,7 +78,7 @@ function App() {
           />
           <Route
             path="/dashboard"
-            element={user ? <Dashboard user={user} salesData={salesData} /> : <Navigate to="/login" />}
+            element={user ? <Dashboard user={user} salesRanking={salesRanking} /> : <Navigate to="/login" />}
           />
           <Route
             path="/evaluation"

@@ -3,111 +3,93 @@ import { Link } from 'react-router-dom'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import './Dashboard.css'
 
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
+const COLORS = ['#667eea', '#48bb78', '#f6ad55', '#fc8181', '#9f7aea', '#38b2ac']
+const DEPARTMENT_COLORS = {
+  '東京': '#667eea',
+  '大阪': '#48bb78',
+  '名古屋': '#f6ad55',
+  '畠山部': '#fc8181'
+}
 
-const Dashboard = ({ user, salesData }) => {
-  const [selectedEmployee, setSelectedEmployee] = useState('')
-  const [selectedYear, setSelectedYear] = useState('')
-  const [selectedDepartment, setSelectedDepartment] = useState('')
+const Dashboard = ({ user, salesRanking }) => {
+  const [selectedTab, setSelectedTab] = useState('overall')
 
-  // データのフィルタリング
-  const filteredData = useMemo(() => {
-    if (!salesData) return []
+  // 売上ランキングデータの取得
+  const rankingData = useMemo(() => {
+    console.log('Dashboard received salesRanking prop:', salesRanking)
+    // プロップスがあればそれを使用、なければローカルストレージから取得（フォールバック）
+    if (salesRanking) return salesRanking
 
-    let data = [...salesData]
+    const stored = localStorage.getItem('salesRanking')
+    console.log('Dashboard loaded from localStorage:', stored ? 'Found data' : 'No data')
+    if (!stored) return null
+    return JSON.parse(stored)
+  }, [salesRanking])
+
+  // 現在のタブのデータを取得
+  const currentData = useMemo(() => {
+    if (!rankingData) return []
 
     // 部長の場合、自部署のみ表示
     if (user.role === 'manager') {
-      data = data.filter(item => item.department === user.department)
+      const deptMap = {
+        '東京': 'tokyo',
+        '大阪': 'osaka',
+        '名古屋': 'nagoya',
+        '畠山部': 'hatakeyama'
+      }
+      const key = deptMap[user.department]
+      return rankingData[key] || []
     }
 
-    // フィルター適用
-    if (selectedDepartment) {
-      data = data.filter(item => item.department === selectedDepartment)
-    }
+    return rankingData[selectedTab] || []
+  }, [rankingData, selectedTab, user])
 
-    if (selectedEmployee) {
-      data = data.filter(item => item.name === selectedEmployee)
-    }
+  // サマリーデータの計算
+  const summaryData = useMemo(() => {
+    if (!currentData || currentData.length === 0) return null
 
-    if (selectedYear) {
-      data = data.filter(item => item.year === parseInt(selectedYear))
+    const totalSales = currentData.reduce((sum, item) => sum + item.sales, 0)
+
+    return {
+      totalSales,
+      memberCount: currentData.length
+    }
+  }, [currentData])
+
+  // 売上シェアデータ（円グラフ用）
+  const shareData = useMemo(() => {
+    if (!currentData || currentData.length === 0) return []
+
+    // 上位5名とその他で構成
+    const sortedData = [...currentData].sort((a, b) => b.sales - a.sales)
+    const top5 = sortedData.slice(0, 5)
+    const others = sortedData.slice(5)
+
+    const data = top5.map(item => ({
+      name: item.name,
+      value: item.sales,
+      share: item.share
+    }))
+
+    if (others.length > 0) {
+      const othersSales = others.reduce((sum, item) => sum + item.sales, 0)
+      const othersShare = others.reduce((sum, item) => sum + item.share, 0)
+      data.push({
+        name: 'その他',
+        value: othersSales,
+        share: othersShare
+      })
     }
 
     return data
-  }, [salesData, user, selectedDepartment, selectedEmployee, selectedYear])
+  }, [currentData])
 
-  // 集計データの計算
-  const summaryData = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return null
-
-    // 全体の集計
-    const totalSales = filteredData.reduce((sum, item) => sum + item.sales, 0)
-    const totalProfit = filteredData.reduce((sum, item) => sum + item.profit, 0)
-
-    // 部署別集計
-    const departmentData = {}
-    filteredData.forEach(item => {
-      if (!departmentData[item.department]) {
-        departmentData[item.department] = { sales: 0, profit: 0 }
-      }
-      departmentData[item.department].sales += item.sales
-      departmentData[item.department].profit += item.profit
-    })
-
-    // 個人別集計
-    const employeeData = {}
-    filteredData.forEach(item => {
-      const key = `${item.name}_${item.year}`
-      if (!employeeData[key]) {
-        employeeData[key] = { name: item.name, year: item.year, sales: 0, profit: 0 }
-      }
-      employeeData[key].sales += item.sales
-      employeeData[key].profit += item.profit
-    })
-
-    return {
-      total: { sales: totalSales, profit: totalProfit },
-      byDepartment: departmentData,
-      byEmployee: Object.values(employeeData),
-      pieData: Object.entries(departmentData).map(([name, data]) => ({ name, value: data.sales }))
-    }
-  }, [filteredData])
-
-  // 年度別データの準備
-  const yearlyData = useMemo(() => {
-    if (!filteredData || filteredData.length === 0) return []
-
-    const yearMap = {}
-    filteredData.forEach(item => {
-      if (!yearMap[item.year]) {
-        yearMap[item.year] = { year: item.year, sales: 0, profit: 0 }
-      }
-      yearMap[item.year].sales += item.sales
-      yearMap[item.year].profit += item.profit
-    })
-
-    return Object.values(yearMap).sort((a, b) => a.year - b.year)
-  }, [filteredData])
-
-  // フィルター用のリスト
-  const employees = useMemo(() => {
-    if (!salesData) return []
-    const uniqueEmployees = [...new Set(salesData.map(item => item.name))]
-    return uniqueEmployees.sort()
-  }, [salesData])
-
-  const years = useMemo(() => {
-    if (!salesData) return []
-    const uniqueYears = [...new Set(salesData.map(item => item.year))]
-    return uniqueYears.sort()
-  }, [salesData])
-
-  const departments = useMemo(() => {
-    if (!salesData) return []
-    const uniqueDepartments = [...new Set(salesData.map(item => item.department))]
-    return uniqueDepartments.sort()
-  }, [salesData])
+  // トップ10データ
+  const top10Data = useMemo(() => {
+    if (!currentData) return []
+    return currentData.slice(0, 10)
+  }, [currentData])
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -117,18 +99,18 @@ const Dashboard = ({ user, salesData }) => {
     }).format(value)
   }
 
-  if (!salesData || salesData.length === 0) {
+  if (!rankingData) {
     return (
       <div className="dashboard-container">
         <div className="dashboard-header">
-          <h2>売上・利益ダッシュボード</h2>
+          <h2>売上ランキングダッシュボード</h2>
           <nav className="dashboard-nav">
             <Link to="/evaluation">評価シート</Link>
             {user.role === 'admin' && <Link to="/upload">データアップロード</Link>}
           </nav>
         </div>
         <div className="no-data">
-          <p>データがありません</p>
+          <p>売上ランキングデータがありません</p>
           {user.role === 'admin' && (
             <Link to="/upload" className="upload-link">データをアップロード</Link>
           )}
@@ -140,55 +122,48 @@ const Dashboard = ({ user, salesData }) => {
   return (
     <div className="dashboard-container">
       <div className="dashboard-header">
-        <h2>売上・利益ダッシュボード</h2>
+        <h2>売上ランキングダッシュボード</h2>
         <nav className="dashboard-nav">
           <Link to="/evaluation">評価シート</Link>
           {user.role === 'admin' && <Link to="/upload">データアップロード</Link>}
         </nav>
       </div>
 
-      {/* フィルター */}
-      <div className="filters">
-        <div className="filter-group">
-          <label>年度</label>
-          <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)}>
-            <option value="">全て</option>
-            {years.map(year => (
-              <option key={year} value={year}>{year}年</option>
-            ))}
-          </select>
+      {/* タブナビゲーション */}
+      {user.role !== 'manager' && (
+        <div className="tab-navigation">
+          <button
+            className={`tab-btn ${selectedTab === 'overall' ? 'active' : ''}`}
+            onClick={() => setSelectedTab('overall')}
+          >
+            全体
+          </button>
+          <button
+            className={`tab-btn ${selectedTab === 'tokyo' ? 'active' : ''}`}
+            onClick={() => setSelectedTab('tokyo')}
+          >
+            東京
+          </button>
+          <button
+            className={`tab-btn ${selectedTab === 'osaka' ? 'active' : ''}`}
+            onClick={() => setSelectedTab('osaka')}
+          >
+            大阪
+          </button>
+          <button
+            className={`tab-btn ${selectedTab === 'nagoya' ? 'active' : ''}`}
+            onClick={() => setSelectedTab('nagoya')}
+          >
+            名古屋
+          </button>
+          <button
+            className={`tab-btn ${selectedTab === 'hatakeyama' ? 'active' : ''}`}
+            onClick={() => setSelectedTab('hatakeyama')}
+          >
+            畠山部
+          </button>
         </div>
-
-        {user.role !== 'manager' && (
-          <div className="filter-group">
-            <label>部署</label>
-            <select value={selectedDepartment} onChange={(e) => setSelectedDepartment(e.target.value)}>
-              <option value="">全て</option>
-              {departments.map(dept => (
-                <option key={dept} value={dept}>{dept}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div className="filter-group">
-          <label>社員</label>
-          <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(e.target.value)}>
-            <option value="">全て</option>
-            {employees.map(emp => (
-              <option key={emp} value={emp}>{emp}</option>
-            ))}
-          </select>
-        </div>
-
-        <button onClick={() => {
-          setSelectedYear('')
-          setSelectedDepartment('')
-          setSelectedEmployee('')
-        }} className="clear-filters">
-          フィルタークリア
-        </button>
-      </div>
+      )}
 
       {/* サマリーカード */}
       {summaryData && (
@@ -201,95 +176,92 @@ const Dashboard = ({ user, salesData }) => {
             </div>
             <div className="card-content">
               <h3>総売上</h3>
-              <p className="amount">{formatCurrency(summaryData.total.sales)}</p>
-            </div>
-          </div>
-          <div className="summary-card profit-card">
-            <div className="card-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-            </div>
-            <div className="card-content">
-              <h3>総利益</h3>
-              <p className="amount profit">{formatCurrency(summaryData.total.profit)}</p>
+              <p className="amount">{formatCurrency(summaryData.totalSales)}</p>
+              <p className="sub-text">{summaryData.memberCount}名</p>
             </div>
           </div>
         </div>
       )}
 
-      {/* チャートセクション */}
+      {/* グラフセクション */}
       <div className="charts-container">
-        {/* 年度別推移グラフ */}
-        {yearlyData.length > 0 && (
+        {/* 売上シェア円グラフ */}
+        {shareData.length > 0 && (
           <div className="chart-section">
-            <h3>年度別推移</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={yearlyData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="year" label={{ value: '年度', position: 'insideBottom', offset: -5 }} />
-                <YAxis tickFormatter={(value) => `¥${value / 10000}万`} />
-                <Tooltip formatter={(value) => formatCurrency(value)} />
-                <Legend />
-                <Bar dataKey="sales" fill="#667eea" name="売上" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="profit" fill="#48bb78" name="利益" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* 部署別売上構成比 */}
-        {summaryData && summaryData.pieData.length > 0 && (
-          <div className="chart-section">
-            <h3>部署別売上構成比</h3>
+            <h3>売上シェア（全体内%）</h3>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={summaryData.pieData}
+                  data={shareData}
                   cx="50%"
                   cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={true}
+                  label={({ name, share }) => `${name}: ${share.toFixed(1)}%`}
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {summaryData.pieData.map((entry, index) => (
+                  {shareData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
                 </Pie>
                 <Tooltip formatter={(value) => formatCurrency(value)} />
+                <Legend />
               </PieChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* トップ10売上ランキング */}
+        {top10Data.length > 0 && (
+          <div className="chart-section">
+            <h3>トップ10売上ランキング</h3>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart data={top10Data} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis type="number" tickFormatter={(value) => `¥${value / 10000}万`} />
+                <YAxis type="category" dataKey="name" width={100} />
+                <Tooltip formatter={(value) => formatCurrency(value)} />
+                <Bar dataKey="sales" fill="#667eea" radius={[0, 4, 4, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         )}
       </div>
 
-      {/* データテーブル */}
-      <div className="data-table-section">
-        <h3>詳細データ</h3>
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>氏名</th>
-              <th>部署</th>
-              <th>年度</th>
-              <th>売上</th>
-              <th>利益</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredData.map((item, index) => (
-              <tr key={index}>
-                <td>{item.name}</td>
-                <td>{item.department}</td>
-                <td>{item.year}年</td>
-                <td>{formatCurrency(item.sales)}</td>
-                <td>{formatCurrency(item.profit)}</td>
+      {/* ランキングテーブル */}
+      <div className="ranking-table-section">
+        <h3>詳細ランキング</h3>
+        <div className="table-wrapper">
+          <table className="ranking-table">
+            <thead>
+              <tr>
+                <th>順位</th>
+                <th>氏名</th>
+                <th>売上</th>
+                <th>全体内%</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {currentData.map((item, index) => (
+                <tr key={index} className={index < 3 ? 'top-rank' : ''}>
+                  <td className="rank-cell">
+                    {index < 3 ? (
+                      <span className={`rank-badge rank-${index + 1}`}>{item.rank}</span>
+                    ) : (
+                      <span className="rank-number">{item.rank}</span>
+                    )}
+                  </td>
+                  <td className="name-cell">{item.name}</td>
+                  <td className="number-cell">{formatCurrency(item.sales)}</td>
+                  <td className="number-cell">
+                    {item.share ? `${item.share.toFixed(2)}%` : '-'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

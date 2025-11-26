@@ -81,10 +81,12 @@ const findSectionRow = (rawData, sectionName) => {
     for (let j = 0; j < row.length; j++) {
       const cell = String(row[j] || '').trim()
       if (cell.includes(sectionName)) {
+        console.log(`Found section "${sectionName}" at row ${i}`)
         return i
       }
     }
   }
+  console.log(`Section "${sectionName}" not found`)
   return -1
 }
 
@@ -111,195 +113,102 @@ const readDataSection = (rawData, headerRowIndex) => {
     data.push(row)
   }
 
+  console.log(`readDataSection: found ${data.length} data rows`)
   return { headers, data }
 }
 
 // ============================================
-// 新フォーマット用のデータ変換関数
+// 売上ランキングデータの変換
 // ============================================
 
-// 部門サマリーを読み取る
-const parseDepartmentSummary = (rawData) => {
-  const sectionRow = findSectionRow(rawData, '部門別サマリー')
-  if (sectionRow === -1) return []
-
-  const { headers, data } = readDataSection(rawData, sectionRow + 1)
-
-  return data.map(row => ({
-    department: String(row[0] || '').trim(),
-    sales: parseNumericString(row[1]),
-    expenses: parseNumericString(row[2]),
-    profit: parseNumericString(row[3]),
-    profitRate: parsePercentString(row[4]),
-    salesShareTotal: parsePercentString(row[5]),
-    profitShareTotal: parsePercentString(row[6])
-  })).filter(item => item.department && item.department !== '合計')
-}
-
-// 個人ランキングを読み取る（全体シート用）
-const parseOverallPersonalRanking = (rawData) => {
-  const sectionRow = findSectionRow(rawData, '全体 個人ランキング')
-  if (sectionRow === -1) return []
-
-  const { headers, data } = readDataSection(rawData, sectionRow + 1)
-
-  return data.map(row => ({
-    rank: parseNumericString(row[0]),
-    name: String(row[1] || '').trim(),
-    sales: parseNumericString(row[2]),
-    salesShare: parsePercentString(row[3]),
-    profit: parseNumericString(row[4]),
-    profitShare: parsePercentString(row[5]),
-    profitRate: parsePercentString(row[6]),
-    department: '全体'
-  })).filter(item => item.name && item.rank > 0)
-}
-
-// 部門シートのサマリーを読み取る
-const parseDeptSheetSummary = (rawData, deptName) => {
-  const sectionRow = findSectionRow(rawData, `${deptName} サマリー`)
-  if (sectionRow === -1) return null
-
-  const { headers, data } = readDataSection(rawData, sectionRow + 1)
-
-  const summary = {}
-  data.forEach(row => {
-    const item = String(row[0] || '').trim()
-    const value = row[1]
-    if (item === '売上高') summary.sales = parseNumericString(value)
-    if (item === '支払高') summary.expenses = parseNumericString(value)
-    if (item === '粗利益') summary.profit = parseNumericString(value)
-    if (item === '粗利益率') summary.profitRate = parsePercentString(value)
-    if (item === '全体売上比率') summary.salesShareTotal = parsePercentString(value)
-    if (item === '全体粗利比率') summary.profitShareTotal = parsePercentString(value)
-  })
-
-  return summary
-}
-
-// チーム別サマリーを読み取る
-const parseTeamSummary = (rawData, deptName) => {
-  const sectionRow = findSectionRow(rawData, `${deptName} チーム別サマリー`)
-  if (sectionRow === -1) return []
-
-  const { headers, data } = readDataSection(rawData, sectionRow + 1)
-
-  return data.map(row => ({
-    team: String(row[0] || '').trim(),
-    sales: parseNumericString(row[1]),
-    expenses: parseNumericString(row[2]),
-    profit: parseNumericString(row[3]),
-    profitRate: parsePercentString(row[4]),
-    salesShareDept: parsePercentString(row[5]),
-    profitShareDept: parsePercentString(row[6])
-  })).filter(item => item.team && item.team !== '合計')
-}
-
-// 部門シートの個人ランキングを読み取る
-const parseDeptPersonalRanking = (rawData, deptName) => {
-  const sectionRow = findSectionRow(rawData, `${deptName} 個人ランキング`)
-  if (sectionRow === -1) return []
-
-  const { headers, data } = readDataSection(rawData, sectionRow + 1)
-
-  // ヘッダーから所属チーム列があるか判定
-  const hasTeamColumn = headers.some(h => h.includes('所属') || h.includes('チーム'))
-
-  return data.map(row => {
-    if (hasTeamColumn) {
-      return {
-        rank: parseNumericString(row[0]),
-        name: String(row[1] || '').trim(),
-        team: String(row[2] || '').trim(),
-        sales: parseNumericString(row[3]),
-        salesShare: parsePercentString(row[4]),
-        profit: parseNumericString(row[5]),
-        profitShare: parsePercentString(row[6]),
-        profitRate: parsePercentString(row[7]),
-        department: deptName
-      }
-    } else {
-      return {
-        rank: parseNumericString(row[0]),
-        name: String(row[1] || '').trim(),
-        team: '',
-        sales: parseNumericString(row[2]),
-        salesShare: parsePercentString(row[3]),
-        profit: parseNumericString(row[4]),
-        profitShare: parsePercentString(row[5]),
-        profitRate: parsePercentString(row[6]),
-        department: deptName
-      }
-    }
-  }).filter(item => item.name && item.rank > 0)
-}
-
-// ============================================
-// メインの読み込み関数
-// ============================================
-
-export const fetchAllSalesData = async (spreadsheetUrl) => {
-  const sheetNames = ['全体', '東京', '大阪', '名古屋', '畠山部']
-
-  try {
-    const result = {
-      departmentSummary: [],
-      overallRanking: [],
-      departments: {},
-      errors: []
-    }
-
-    // 各シートを読み込み
-    for (const sheetName of sheetNames) {
-      try {
-        const rawData = await fetchSheetData(spreadsheetUrl, sheetName)
-        console.log(`Processing sheet: ${sheetName}`)
-
-        if (sheetName === '全体') {
-          // 部門サマリー
-          result.departmentSummary = parseDepartmentSummary(rawData)
-          console.log(`  - Department summary: ${result.departmentSummary.length} items`)
-
-          // 全体個人ランキング
-          result.overallRanking = parseOverallPersonalRanking(rawData)
-          console.log(`  - Overall ranking: ${result.overallRanking.length} items`)
-        } else {
-          // 部門シート
-          const deptData = {
-            summary: parseDeptSheetSummary(rawData, sheetName),
-            teams: parseTeamSummary(rawData, sheetName),
-            ranking: parseDeptPersonalRanking(rawData, sheetName)
-          }
-
-          result.departments[sheetName] = deptData
-          console.log(`  - Summary: ${deptData.summary ? 'OK' : 'Not found'}`)
-          console.log(`  - Teams: ${deptData.teams.length} items`)
-          console.log(`  - Ranking: ${deptData.ranking.length} items`)
-        }
-      } catch (error) {
-        console.error(`Error processing ${sheetName}:`, error)
-        result.errors.push({ sheet: sheetName, error: error.message })
-      }
-    }
-
-    return result
-  } catch (error) {
-    console.error('Error fetching all sales data:', error)
-    throw error
-  }
-}
-
-// 旧フォーマット互換用（既存コードとの互換性のため）
 export const convertSalesRankingData = (rawData, sheetName) => {
   console.log(`convertSalesRankingData called for sheet: ${sheetName}`)
-  
-  if (sheetName === '全体') {
-    return parseOverallPersonalRanking(rawData)
-  } else {
-    return parseDeptPersonalRanking(rawData, sheetName)
+  console.log(`Raw data rows: ${rawData?.length || 0}`)
+
+  if (!rawData || rawData.length < 2) {
+    console.log('No data to convert')
+    return []
   }
+
+  let sectionName = ''
+  if (sheetName === '全体') {
+    sectionName = '全体 個人ランキング'
+  } else {
+    sectionName = `${sheetName} 個人ランキング`
+  }
+
+  const sectionRow = findSectionRow(rawData, sectionName)
+  
+  if (sectionRow === -1) {
+    console.log(`Section not found, trying alternative search...`)
+    // フォールバック: 「個人ランキング」だけで探す
+    const altSectionRow = findSectionRow(rawData, '個人ランキング')
+    if (altSectionRow === -1) {
+      console.log('No ranking section found')
+      return []
+    }
+    return parseRankingSection(rawData, altSectionRow, sheetName)
+  }
+
+  return parseRankingSection(rawData, sectionRow, sheetName)
 }
 
+const parseRankingSection = (rawData, sectionRow, sheetName) => {
+  const { headers, data } = readDataSection(rawData, sectionRow + 1)
+  
+  console.log(`Headers: ${headers.join(', ')}`)
+  console.log(`Data rows: ${data.length}`)
+
+  // ヘッダーから列インデックスを特定
+  const findCol = (keywords) => {
+    return headers.findIndex(h => keywords.some(k => h.includes(k)))
+  }
+
+  const rankCol = findCol(['順位'])
+  const nameCol = findCol(['氏名', '名前'])
+  const salesCol = findCol(['売上額', '売上高'])
+  const salesShareCol = findCol(['売上全体比率', '売上比率', '部内売上比率'])
+  const profitCol = findCol(['粗利額', '粗利益'])
+  const profitShareCol = findCol(['粗利全体比率', '粗利比率', '部内粗利比率'])
+  const profitRateCol = findCol(['粗利益率'])
+  const teamCol = findCol(['所属チーム', 'チーム', '所属'])
+
+  console.log(`Column indices - rank: ${rankCol}, name: ${nameCol}, sales: ${salesCol}, profit: ${profitCol}`)
+
+  const results = data.map(row => {
+    const rank = rankCol >= 0 ? parseNumericString(row[rankCol]) : 0
+    const name = nameCol >= 0 ? String(row[nameCol] || '').trim() : ''
+    const sales = salesCol >= 0 ? parseNumericString(row[salesCol]) : 0
+    const salesShare = salesShareCol >= 0 ? parsePercentString(row[salesShareCol]) : 0
+    const profit = profitCol >= 0 ? parseNumericString(row[profitCol]) : 0
+    const profitShare = profitShareCol >= 0 ? parsePercentString(row[profitShareCol]) : 0
+    const profitRate = profitRateCol >= 0 ? parsePercentString(row[profitRateCol]) : 0
+    const team = teamCol >= 0 ? String(row[teamCol] || '').trim() : ''
+
+    return {
+      rank: rank,
+      name: name,
+      sales: sales,
+      share: salesShare,  // UI互換用
+      profit: profit,
+      profitShare: profitShare,
+      profitRate: profitRate,
+      achievement: 0,  // UI互換用（データなし）
+      yoy: 0,  // UI互換用（データなし）
+      department: sheetName,
+      team: team
+    }
+  }).filter(item => item.name && item.rank > 0)
+
+  console.log(`Converted ${results.length} records for ${sheetName}`)
+  if (results.length > 0) {
+    console.log('First record:', results[0])
+  }
+
+  return results
+}
+
+// 複数シートから売上データを読み込む
 export const fetchAllSalesSheets = async (spreadsheetUrl) => {
   const sheetNames = ['全体', '東京', '大阪', '名古屋', '畠山部']
 
@@ -352,6 +261,17 @@ export const fetchAllSalesSheets = async (spreadsheetUrl) => {
         })
       }
     })
+
+    // 結果のサマリーをログ出力
+    console.log('=== Sales Data Summary ===')
+    console.log(`Overall: ${salesData.overall.length} records`)
+    console.log(`Tokyo: ${salesData.tokyo.length} records`)
+    console.log(`Osaka: ${salesData.osaka.length} records`)
+    console.log(`Nagoya: ${salesData.nagoya.length} records`)
+    console.log(`Hatakeyama: ${salesData.hatakeyama.length} records`)
+    if (salesData.errors.length > 0) {
+      console.log(`Errors: ${salesData.errors.length}`)
+    }
 
     return salesData
   } catch (error) {

@@ -49,10 +49,14 @@ const Dashboard = ({ user, salesRanking }) => {
   const summaryData = useMemo(() => {
     if (!currentData || currentData.length === 0) return null
 
-    const totalSales = currentData.reduce((sum, item) => sum + item.sales, 0)
+    const totalSales = currentData.reduce((sum, item) => sum + (item.sales || 0), 0)
+    const totalProfit = currentData.reduce((sum, item) => sum + (item.profit || 0), 0)
+    const profitRate = totalSales > 0 ? (totalProfit / totalSales * 100) : 0
 
     return {
       totalSales,
+      totalProfit,
+      profitRate,
       memberCount: currentData.length
     }
   }, [currentData])
@@ -62,19 +66,19 @@ const Dashboard = ({ user, salesRanking }) => {
     if (!currentData || currentData.length === 0) return []
 
     // 上位5名とその他で構成
-    const sortedData = [...currentData].sort((a, b) => b.sales - a.sales)
+    const sortedData = [...currentData].sort((a, b) => (b.sales || 0) - (a.sales || 0))
     const top5 = sortedData.slice(0, 5)
     const others = sortedData.slice(5)
 
     const data = top5.map(item => ({
       name: item.name,
-      value: item.sales,
-      share: item.share
+      value: item.sales || 0,
+      share: item.share || 0
     }))
 
     if (others.length > 0) {
-      const othersSales = others.reduce((sum, item) => sum + item.sales, 0)
-      const othersShare = others.reduce((sum, item) => sum + item.share, 0)
+      const othersSales = others.reduce((sum, item) => sum + (item.sales || 0), 0)
+      const othersShare = others.reduce((sum, item) => sum + (item.share || 0), 0)
       data.push({
         name: 'その他',
         value: othersSales,
@@ -96,7 +100,7 @@ const Dashboard = ({ user, salesRanking }) => {
       style: 'currency',
       currency: 'JPY',
       minimumFractionDigits: 0
-    }).format(value)
+    }).format(value || 0)
   }
 
   if (!rankingData) {
@@ -180,6 +184,18 @@ const Dashboard = ({ user, salesRanking }) => {
               <p className="sub-text">{summaryData.memberCount}名</p>
             </div>
           </div>
+          <div className="summary-card profit-card">
+            <div className="card-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+            <div className="card-content">
+              <h3>総粗利益</h3>
+              <p className="amount">{formatCurrency(summaryData.totalProfit)}</p>
+              <p className="sub-text">粗利率: {summaryData.profitRate.toFixed(1)}%</p>
+            </div>
+          </div>
         </div>
       )}
 
@@ -196,7 +212,7 @@ const Dashboard = ({ user, salesRanking }) => {
                   cx="50%"
                   cy="50%"
                   labelLine={true}
-                  label={({ name, share }) => `${name}: ${share.toFixed(1)}%`}
+                  label={({ name, share }) => `${name}: ${(share || 0).toFixed(1)}%`}
                   outerRadius={100}
                   fill="#8884d8"
                   dataKey="value"
@@ -219,7 +235,7 @@ const Dashboard = ({ user, salesRanking }) => {
             <ResponsiveContainer width="100%" height={400}>
               <BarChart data={top10Data} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={(value) => `¥${value / 10000}万`} />
+                <XAxis type="number" tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`} />
                 <YAxis type="category" dataKey="name" width={100} />
                 <Tooltip formatter={(value) => formatCurrency(value)} />
                 <Bar dataKey="sales" fill="#667eea" radius={[0, 4, 4, 0]} />
@@ -239,7 +255,10 @@ const Dashboard = ({ user, salesRanking }) => {
                 <th>順位</th>
                 <th>氏名</th>
                 <th>売上</th>
-                <th>全体内%</th>
+                <th>売上比率</th>
+                <th>粗利益</th>
+                <th>粗利比率</th>
+                <th>粗利益率</th>
               </tr>
             </thead>
             <tbody>
@@ -256,6 +275,13 @@ const Dashboard = ({ user, salesRanking }) => {
                   <td className="number-cell">{formatCurrency(item.sales)}</td>
                   <td className="number-cell">
                     {item.share ? `${item.share.toFixed(2)}%` : '-'}
+                  </td>
+                  <td className="number-cell">{formatCurrency(item.profit)}</td>
+                  <td className="number-cell">
+                    {item.profitShare ? `${item.profitShare.toFixed(2)}%` : '-'}
+                  </td>
+                  <td className="number-cell">
+                    {item.profitRate ? `${item.profitRate.toFixed(1)}%` : '-'}
                   </td>
                 </tr>
               ))}

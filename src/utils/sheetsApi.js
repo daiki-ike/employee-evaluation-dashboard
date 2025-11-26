@@ -212,12 +212,7 @@ export const convertToStructuredData = (rawData, type) => {
 
         if (text === '審査内容') colMap.criteria = idx
 
-        // minorCategoryはヘッダーがない場合が多いので、majorとcriteriaの間にあると推測
-        // ただし、majorDescが見つかっていない場合、majorの隣がminorの可能性もあるため、慎重に
         if (idx > colMap.majorCategory && idx < colMap.criteria && String(rawData[headerRowIndex + 2]?.[idx] || '').length > 0) {
-          // 既存のロジック：majorとcriteriaの間にある列をminorとする
-          // もしmajorDescが見つかっておらず、かつこの列がmajorの直後なら、ここがminorの可能性が高い
-          // ユーザーのシート構造が [No, Major, Minor, Criteria] の場合、idx=2はMinor
           colMap.minorCategory = idx
         }
       })
@@ -246,198 +241,19 @@ export const convertToStructuredData = (rawData, type) => {
 
         // 結合セルの保管（空なら前の値を継承）
         if (catNoVal) currentCategoryNo = catNoVal
-
-        // タイトルと説明の分離ロジック
-        let tempMajor = majorVal
-        let tempDesc = majorDescVal
-
-        // 説明が空で、タイトルに改行や「が含まれる場合、分割を試みる
-        if (!tempDesc && tempMajor) {
-          const strMajor = String(tempMajor)
-          if (strMajor.includes('\n')) {
-            const parts = strMajor.split('\n')
-            tempMajor = parts[0].trim()
-            tempDesc = parts.slice(1).join('\n').trim()
-          } else {
-            // 括弧での分割を試みる（優先順位: 「, ｢, 【, [, (, （）
-            const brackets = ['「', '｢', '【', '[', '(', '（']
-            let splitIdx = -1
-
-            for (const bracket of brackets) {
-              const idx = strMajor.indexOf(bracket)
-              if (idx > 0) { // 先頭でない場合のみ分割
-                splitIdx = idx
-                break
-              }
-            }
-
-            if (splitIdx > 0) {
-              tempDesc = strMajor.substring(splitIdx).trim()
-              tempMajor = strMajor.substring(0, splitIdx).trim()
-            }
-          }
-        }
-
-        if (tempMajor) currentMajorCategory = tempMajor
-        if (tempDesc) currentMajorDesc = tempDesc
+        if (majorVal) currentMajorCategory = majorVal
+        if (majorDescVal) currentMajorDesc = majorDescVal
         if (minorVal) currentMinorCategory = minorVal
-
-        // 審査内容がある行を有効なデータとする
-        if (criteriaVal && criteriaVal !== '審査内容') {
-          structuredData.push({
-            id: questionCounter, // 連番IDを付与
-            questionNo: questionCounter,
-            categoryNo: currentCategoryNo,
-            majorCategory: currentMajorCategory,
-            majorCategoryDesc: currentMajorDesc,
-            minorCategory: currentMinorCategory,
-            criteria: criteriaVal
-          })
-          questionCounter++
-        }
       }
-
-      if (structuredData.length > 0) return structuredData
     }
 
-    // デフォルト値（見つからない場合は旧仕様のインデックスを使用）
-    // ヘッダーが見つからない場合、データの中身から推測する
-    if (idx.questionNo === -1) {
-      // 1行目のデータを確認
-      const firstRow = rawData[0]
-      // パターンA: [CatNo, QNo, MajorTitle, MajorDesc, Minor, Criteria]
-      // ユーザーのデータ: [1, 1, "経営...", "「業績...", "財務...", "●..."]
-      if (typeof firstRow[1] === 'number' && typeof firstRow[2] === 'string') {
-        console.log('Detected headerless format (Pattern A - with Description)')
-        idx.categoryNo = 0
-        idx.questionNo = 1
-        idx.major = 2
-        // 3列目は大項目の説明だが、majorCategoryに含めるか、別途扱うか
-        // ここではMajorCategoryとして結合する
-        idx.majorDesc = 3
-        idx.minor = 4
-        idx.criteria = 5
-      } else {
-        // 旧デフォルト
-        idx.categoryNo = 0
-        idx.major = 1
-        idx.minor = 3
-        idx.criteria = 4
-        idx.questionNo = 5
-      }
-    } else {
-      // ヘッダーが見つかった場合のデフォルト補完
-      if (idx.categoryNo === -1) idx.categoryNo = 0
-      if (idx.major === -1) idx.major = 1
-      if (idx.minor === -1) idx.minor = 3
-      if (idx.criteria === -1) idx.criteria = 4
-    }
-
-    console.log('Final column indices:', idx)
-
-    // 前行の値を保持する変数（結合セル対策）
-    let lastCategoryNo = null
-    let lastMajor = ''
-    let lastMajorDesc = '' // 追加
-    let lastMinor = ''
-
-    // データをオブジェクト配列に変換
-    return rawData
-      .filter(row => {
-        // ヘッダー行を除外
-        if (row === rawData[0] && idx.questionNo !== -1 && typeof row[idx.questionNo] === 'string' && row[idx.questionNo].includes('No')) return false
-
-        // 設問番号がある、または結合セルの続き（設問番号がnullでもCriteriaがあれば）
-        // 今回は設問番号が必須とするが、結合セルの場合はCategoryNoなどが空の可能性がある
-        const criteria = row[idx.criteria] || row[4] // フォールバック
-        return criteria // 審査内容があれば有効な行とみなす
-      })
-      .map(row => {
-        // 結合セルの処理（値が空なら前の行の値を使う）
-        const currentCategoryNo = row[idx.categoryNo]
-        const currentMajor = row[idx.major]
-        const currentMajorDesc = idx.majorDesc ? row[idx.majorDesc] : ''
-        const currentMinor = row[idx.minor]
-
-        // CategoryNo
-        if (currentCategoryNo !== null && currentCategoryNo !== undefined && currentCategoryNo !== '') {
-          lastCategoryNo = currentCategoryNo
-        }
-
-        // MajorCategory (タイトル + 説明)
-        // 変更: タイトルと説明を分ける
-        let majorTitle = currentMajor
-        let majorDesc = ''
-
-        if (currentMajorDesc) {
-          majorDesc = currentMajorDesc
-        }
-
-        // タイトルと説明の分離ロジック（デフォルトパス）
-        if (!majorDesc && majorTitle) {
-          const strMajor = String(majorTitle)
-          if (strMajor.includes('\n')) {
-            const parts = strMajor.split('\n')
-            majorTitle = parts[0].trim()
-            majorDesc = parts.slice(1).join('\n').trim()
-          } else {
-            // 括弧での分割を試みる
-            const brackets = ['「', '｢', '【', '[', '(', '（']
-            let splitIdx = -1
-
-            for (const bracket of brackets) {
-              const idx = strMajor.indexOf(bracket)
-              if (idx > 0) {
-                splitIdx = idx
-                break
-              }
-            }
-
-            if (splitIdx > 0) {
-              majorDesc = strMajor.substring(splitIdx).trim()
-              majorTitle = strMajor.substring(0, splitIdx).trim()
-            }
-          }
-        }
-
-        if (majorTitle && majorTitle.trim() !== '') {
-          lastMajor = majorTitle
-          // 説明も保持する必要があるが、lastMajorに含めると結合されてしまう
-          // ここではlastMajorはタイトルのみとする
-        }
-
-        // 説明の保持（行結合のロジック上、前の行の説明を保持する必要があるか？）
-        // 簡易的に、現在の行に説明があればそれを使い、なければ空とする（結合セルの場合、タイトルは継承されるが説明は？）
-        // 通常、結合セルなら説明も同じセル範囲に含まれるはず
-        // しかし、行ごとに処理しているため、タイトルがnullなら前のタイトルを使うのと同様、説明も前の説明を使うべき
-
-        // lastMajorDesc変数を追加して管理する
-        if (currentMajorDesc && String(currentMajorDesc).trim() !== '') {
-          lastMajorDesc = currentMajorDesc
-        } else if (currentMajor && String(currentMajor).trim() !== '') {
-          // タイトルが新しくなったのに説明がない場合、説明をリセットすべきか？
-          // 結合セルの場合、タイトルがある行に説明もあるはず。
-          // タイトルがある行で説明が空なら、説明なしの項目ということ。
-          lastMajorDesc = ''
-        }
-
-        // MinorCategory
-        if (currentMinor && currentMinor.trim() !== '') {
-          lastMinor = currentMinor
-        }
-
-        // 設問番号は各行に必須と仮定（なければ連番などを振るべきだが、一旦そのまま）
-        const qNo = row[idx.questionNo]
-
-        return {
-          categoryNo: lastCategoryNo,
-          majorCategory: lastMajor,
-          majorCategoryDesc: lastMajorDesc, // 追加
-          minorCategory: lastMinor,
-          criteria: row[idx.criteria],
-          questionNo: parseInt(qNo) || 0 // 設問番号がない場合は0（表示時に注意）
-        }
-      })
+    return rawData.slice(1).filter(row => row.length >= 5).map(row => ({
+      categoryNo: row[idx.categoryNo],
+      majorCategory: row[idx.major],
+      minorCategory: row[idx.minor],
+      criteria: row[idx.criteria],
+      questionNo: parseInt(row[idx.questionNo]) || 0
+    }))
   } else if (type === 'selfEvaluation' || type === 'managerEvaluation') {
     // 自己評価・部長評価フォーム回答の変換
     // 構造: タイムスタンプ, 氏名, 部署, 設問1回答, 設問2回答, ...
@@ -503,7 +319,239 @@ export const mergeEvaluationData = (masterData, selfData, managerData, scoreData
   return employees
 }
 
-// 売上ランキングデータの変換
+// ============================================
+// 売上ランキングデータの変換（大幅改良版）
+// ============================================
+
+// 数値文字列をパースするヘルパー関数
+const parseNumericString = (str) => {
+  if (typeof str === 'number') return str
+  if (!str) return 0
+  // 全角・半角の円記号、カンマ、パーセント、空白を削除
+  const cleanStr = str.toString().replace(/[¥￥,%％\s　]/g, '')
+  const num = parseFloat(cleanStr)
+  return isNaN(num) ? 0 : num
+}
+
+// 順位文字列から数値を抽出（「1位」→ 1）
+const parseRankString = (str) => {
+  if (typeof str === 'number') return str
+  if (!str) return 0
+  const match = String(str).match(/(\d+)/)
+  return match ? parseInt(match[1]) : 0
+}
+
+// セルが有効な氏名かどうかを判定
+const isValidName = (cell) => {
+  if (!cell) return false
+  const str = String(cell).trim()
+  // 空、数値のみ、記号のみ、ヘッダー的な文字列は除外
+  if (str === '') return false
+  if (/^[\d,.\s¥￥%％位]+$/.test(str)) return false
+  if (['売上ランキング', '粗利ランキング', '氏名', '売上額', '全体内%', '部内%', '部内％', '全体内％', '粗利額', '順位'].includes(str)) return false
+  // 部署名っぽいものも除外
+  if (['東京', '大阪', '名古屋', '畠山部', '全体', '合計'].includes(str)) return false
+  // 2文字以上の日本語または英字を含む
+  return str.length >= 2
+}
+
+// ヘッダー行を検出する関数
+const findRankingHeaderRow = (rawData) => {
+  for (let i = 0; i < rawData.length; i++) {
+    const row = rawData[i]
+    if (!row) continue
+    
+    // 「売上ランキング」と「氏名」と「売上額」を含む行を探す
+    const rowText = row.map(cell => String(cell || '').trim())
+    const hasRanking = rowText.some(t => t === '売上ランキング' || t.includes('ランキング'))
+    const hasName = rowText.some(t => t === '氏名')
+    const hasSales = rowText.some(t => t === '売上額' || t === '売上高')
+    
+    if (hasRanking && hasName && hasSales) {
+      return i
+    }
+  }
+  return -1
+}
+
+// 列インデックスを動的に検出
+const detectColumnIndices = (headerRow) => {
+  const indices = {
+    rank: -1,
+    name: -1,
+    sales: -1,
+    share: -1
+  }
+  
+  if (!headerRow) return indices
+  
+  headerRow.forEach((cell, idx) => {
+    const text = String(cell || '').trim()
+    if (text === '売上ランキング' || text === '順位' || text.includes('ランキング')) {
+      indices.rank = idx
+    }
+    if (text === '氏名') {
+      indices.name = idx
+    }
+    if (text === '売上額' || text === '売上高') {
+      indices.sales = idx
+    }
+    if (text === '全体内%' || text === '全体内％' || text === '部内%' || text === '部内％' || text.includes('内%') || text.includes('内％')) {
+      indices.share = idx
+    }
+  })
+  
+  return indices
+}
+
+// 「全体」シート用：個人ランキングセクションを抽出
+const extractPersonalRanking = (rawData, sheetName) => {
+  const results = []
+  
+  // 「全体」の個人ランキングを探す（行23あたりから始まる）
+  // 特徴：「売上ランキング」「氏名」「売上額」「全体内％」のヘッダー行の後に
+  // 「1位」「丸岡 広樹」のような個人データが続く
+  
+  let inPersonalSection = false
+  let headerIndices = { rank: -1, name: -1, sales: -1, share: -1 }
+  
+  for (let i = 0; i < rawData.length; i++) {
+    const row = rawData[i]
+    if (!row) continue
+    
+    const rowText = row.map(cell => String(cell || '').trim())
+    
+    // ヘッダー行を検出（個人ランキングセクション）
+    const hasRanking = rowText.some(t => t === '売上ランキング')
+    const hasName = rowText.some(t => t === '氏名')
+    const hasSales = rowText.some(t => t === '売上額')
+    
+    if (hasRanking && hasName && hasSales) {
+      // 次のデータ行をチェックして、個人名かどうか確認
+      const nextRow = rawData[i + 1]
+      if (nextRow) {
+        const nextRowText = nextRow.map(cell => String(cell || '').trim())
+        // 「1位」で始まり、次が個人名（部署名ではない）なら個人ランキング
+        const hasFirstRank = nextRowText.some(t => t === '1位' || t === '1')
+        const potentialName = nextRowText.find(t => isValidName(t))
+        
+        if (hasFirstRank && potentialName) {
+          inPersonalSection = true
+          headerIndices = detectColumnIndices(row)
+          console.log(`[Debug] ${sheetName}: Found personal ranking header at row ${i + 1}`, headerIndices)
+          continue
+        }
+      }
+    }
+    
+    // 個人ランキングセクション内のデータを処理
+    if (inPersonalSection) {
+      const rankCell = headerIndices.rank >= 0 ? row[headerIndices.rank] : null
+      const nameCell = headerIndices.name >= 0 ? row[headerIndices.name] : null
+      const salesCell = headerIndices.sales >= 0 ? row[headerIndices.sales] : null
+      const shareCell = headerIndices.share >= 0 ? row[headerIndices.share] : null
+      
+      // 空行や合計行で終了
+      if (!rankCell && !nameCell && !salesCell) {
+        // 連続空行でセクション終了
+        inPersonalSection = false
+        continue
+      }
+      
+      // 合計行をスキップ
+      if (String(nameCell || '').includes('合計')) {
+        continue
+      }
+      
+      // 有効な個人データを追加
+      if (isValidName(nameCell)) {
+        results.push({
+          rank: parseRankString(rankCell),
+          name: String(nameCell).trim(),
+          sales: parseNumericString(salesCell),
+          share: parseNumericString(shareCell),
+          profit: 0,
+          achievement: 0,
+          yoy: 0,
+          department: sheetName
+        })
+      }
+    }
+  }
+  
+  return results
+}
+
+// 部署シート用：すべてのランキングセクションを抽出
+const extractAllRankings = (rawData, sheetName) => {
+  const results = []
+  const seen = new Set() // 重複チェック用
+  
+  let currentHeaderIndices = null
+  let collectingData = false
+  
+  for (let i = 0; i < rawData.length; i++) {
+    const row = rawData[i]
+    if (!row) continue
+    
+    const rowText = row.map(cell => String(cell || '').trim())
+    
+    // ヘッダー行を検出
+    const hasRanking = rowText.some(t => t === '売上ランキング')
+    const hasName = rowText.some(t => t === '氏名')
+    const hasSales = rowText.some(t => t === '売上額' || t === '売上高')
+    
+    if (hasRanking && hasName && hasSales) {
+      currentHeaderIndices = detectColumnIndices(row)
+      collectingData = true
+      console.log(`[Debug] ${sheetName}: Found ranking header at row ${i + 1}`, currentHeaderIndices)
+      continue
+    }
+    
+    // データ収集中
+    if (collectingData && currentHeaderIndices) {
+      const rankCell = currentHeaderIndices.rank >= 0 ? row[currentHeaderIndices.rank] : null
+      const nameCell = currentHeaderIndices.name >= 0 ? row[currentHeaderIndices.name] : null
+      const salesCell = currentHeaderIndices.sales >= 0 ? row[currentHeaderIndices.sales] : null
+      const shareCell = currentHeaderIndices.share >= 0 ? row[currentHeaderIndices.share] : null
+      
+      // 空行でデータ収集終了
+      const isEmptyRow = rowText.every(t => t === '' || t === null)
+      if (isEmptyRow) {
+        collectingData = false
+        currentHeaderIndices = null
+        continue
+      }
+      
+      // 合計行をスキップ
+      if (String(nameCell || '').includes('合計')) {
+        continue
+      }
+      
+      // 有効な個人データを追加（重複除外）
+      if (isValidName(nameCell)) {
+        const name = String(nameCell).trim()
+        if (!seen.has(name)) {
+          seen.add(name)
+          results.push({
+            rank: parseRankString(rankCell),
+            name: name,
+            sales: parseNumericString(salesCell),
+            share: parseNumericString(shareCell),
+            profit: 0,
+            achievement: 0,
+            yoy: 0,
+            department: sheetName
+          })
+        }
+      }
+    }
+  }
+  
+  return results
+}
+
+// 売上ランキングデータの変換（メイン関数）
 export const convertSalesRankingData = (rawData, sheetName) => {
   console.log(`convertSalesRankingData called for sheet: ${sheetName}`)
 
@@ -512,63 +560,24 @@ export const convertSalesRankingData = (rawData, sheetName) => {
     return []
   }
 
-  // ヘッダー行を自動検出（「売上ランキング」または「順位」を含む行）
-  let headerIndex = rawData.findIndex(row =>
-    row.some(cell => {
-      const cellStr = String(cell || '').trim()
-      return cellStr === '売上ランキング' || cellStr === '順位' || cellStr.includes('ランキング')
-    })
-  )
-
-  // ヘッダーが見つからない場合は1行目をヘッダーとする
-  if (headerIndex === -1) {
-    headerIndex = 0
+  let result = []
+  
+  if (sheetName === '全体') {
+    // 全体シートは個人ランキングのみを抽出
+    result = extractPersonalRanking(rawData, sheetName)
+  } else {
+    // 部署シートはすべてのランキングを抽出
+    result = extractAllRankings(rawData, sheetName)
   }
-
-  console.log(`[Debug] ${sheetName} header found at row: ${headerIndex + 1}`)
-
-  // ヘッダーの次の行からデータとして扱う
-  const dataRows = rawData.slice(headerIndex + 1)
-  console.log(`[Debug] ${sheetName} dataRows length: ${dataRows.length}`)
-
-  // 数値文字列（"¥ 1,000" や "10.5%"）をパースするヘルパー関数
-  const parseNumericString = (str) => {
-    if (typeof str === 'number') return str
-    if (!str) return 0
-    // 全角・半角の円記号、カンマ、パーセント、空白を削除
-    const cleanStr = str.toString().replace(/[¥￥,%\s]/g, '')
-    const num = parseFloat(cleanStr)
-    return isNaN(num) ? 0 : num
-  }
-
-  const result = dataRows
-    .filter(row => {
-      const isValid = row && row.length > 0
-      if (!isValid) console.log(`[Debug] Filtered out empty row in ${sheetName}`)
-      return isValid
-    })
-    .map((row, index) => {
-      // A列が空の場合、実際のデータはB列(index=1)から始まる
-      const item = {
-        rank: parseInt(row[1]) || 0,      // B列
-        name: String(row[2] || '').trim(), // C列
-        sales: parseNumericString(row[3]), // D列
-        share: parseNumericString(row[4]), // E列（全体内%）
-        profit: 0,
-        achievement: 0,
-        yoy: 0,
-        department: sheetName
-      }
-      if (index === 0) console.log(`[Debug] ${sheetName} first mapped item:`, item)
-      return item
-    })
-    .filter(item => {
-      const hasName = item.name !== ''
-      if (!hasName) console.log(`[Debug] Filtered out item without name in ${sheetName}`)
-      return hasName
-    })
-
+  
+  // 順位でソート
+  result.sort((a, b) => a.rank - b.rank)
+  
   console.log(`convertSalesRankingData result for ${sheetName}: ${result.length} records`)
+  if (result.length > 0) {
+    console.log(`[Debug] ${sheetName} first record:`, result[0])
+    console.log(`[Debug] ${sheetName} last record:`, result[result.length - 1])
+  }
 
   return result
 }
@@ -635,4 +644,3 @@ export const fetchAllSalesSheets = async (spreadsheetUrl) => {
     throw error
   }
 }
-

@@ -59,7 +59,7 @@ function App() {
   }
 
   return (
-    <Router>
+   <Router basename="/employee-evaluation-dashboard">
       <div className="App">
         {user && (
           <header className="app-header">

@@ -437,6 +437,11 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
       console.log(`[fetchAllSalesSheets] Fetching sheet: ${sheetName}`)
       const data = await fetchSheetData(spreadsheetUrl, sheetName)
       
+      console.log(`[fetchAllSalesSheets] ${sheetName} first 5 rows:`)
+      data.slice(0, 5).forEach((row, idx) => {
+        console.log(`  Row ${idx}: ${String(row[0] || '').substring(0, 50)}`)
+      })
+      
       // 全てのランキングセクションからデータを取得
       const allRankings = []
       
@@ -444,11 +449,21 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
         const row = data[i]
         const firstCell = String(row[0] || '').trim()
         
-        // ランキングセクションを探す
-        if (firstCell.startsWith('【') && firstCell.includes('ランキング') && firstCell.includes('】')) {
-          const sectionData = data.slice(i)
-          const ranking = parseRankingSection(sectionData)
-          allRankings.push(...ranking)
+        // 【】で始まるセクションをログ出力
+        if (firstCell.startsWith('【')) {
+          console.log(`[fetchAllSalesSheets] Found section at row ${i}: "${firstCell}"`)
+        }
+        
+        // ランキングセクションを探す（「個人ランキング」または「ランキング」を含む）
+        if (firstCell.startsWith('【') && firstCell.includes('】')) {
+          if (firstCell.includes('個人ランキング') || 
+              (firstCell.includes('ランキング') && !firstCell.includes('サマリー'))) {
+            console.log(`[fetchAllSalesSheets] Parsing ranking section: "${firstCell}"`)
+            const sectionData = data.slice(i)
+            const ranking = parseRankingSection(sectionData)
+            console.log(`[fetchAllSalesSheets] Got ${ranking.length} records from this section`)
+            allRankings.push(...ranking)
+          }
         }
       }
       
@@ -457,13 +472,20 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
         result[key] = allRankings
       }
       
-      console.log(`[fetchAllSalesSheets] ${sheetName}: ${allRankings.length} records`)
+      console.log(`[fetchAllSalesSheets] ${sheetName}: ${allRankings.length} total records`)
     } catch (error) {
       console.error(`[fetchAllSalesSheets] Error fetching ${sheetName}:`, error)
     }
   }
 
   console.log('[fetchAllSalesSheets] Complete')
+  console.log('[fetchAllSalesSheets] Result summary:', {
+    overall: result.overall.length,
+    tokyo: result.tokyo.length,
+    osaka: result.osaka.length,
+    nagoya: result.nagoya.length,
+    hatakeyama: result.hatakeyama.length
+  })
   return result
 }
 
@@ -471,10 +493,17 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
  * ランキングセクションをパース（内部関数）
  */
 const parseRankingSection = (data) => {
-  if (!data || data.length < 2) return []
+  if (!data || data.length < 2) {
+    console.log('[parseRankingSection] Not enough data rows')
+    return []
+  }
   
   // 最初の行はセクションタイトル、次の行はヘッダー
+  const sectionTitle = String(data[0][0] || '').trim()
   const headers = data[1]
+  
+  console.log('[parseRankingSection] Section:', sectionTitle)
+  console.log('[parseRankingSection] Headers:', headers)
   
   const colRank = headers.findIndex(h => String(h || '').includes('順位'))
   const colName = headers.findIndex(h => String(h || '').includes('氏名') || String(h || '').includes('名前'))
@@ -483,6 +512,17 @@ const parseRankingSection = (data) => {
   const colProfit = headers.findIndex(h => String(h || '').includes('粗利額') || String(h || '').includes('粗利益'))
   const colProfitRate = headers.findIndex(h => String(h || '').includes('粗利益率') || String(h || '').includes('粗利率'))
   
+  console.log('[parseRankingSection] Column indices:', { 
+    rank: colRank, name: colName, team: colTeam, 
+    sales: colSales, profit: colProfit, profitRate: colProfitRate 
+  })
+  
+  // 氏名列が見つからない場合は空を返す
+  if (colName === -1) {
+    console.log('[parseRankingSection] Name column not found, skipping')
+    return []
+  }
+  
   const results = []
   
   for (let i = 2; i < data.length; i++) {
@@ -490,21 +530,32 @@ const parseRankingSection = (data) => {
     const firstCell = String(row[0] || '').trim()
     
     // 次のセクションに到達したら終了
-    if (firstCell.startsWith('【')) break
-    // 空行はスキップ
-    if (!firstCell || firstCell === '') continue
+    if (firstCell.startsWith('【')) {
+      console.log(`[parseRankingSection] Hit next section at row ${i}, stopping`)
+      break
+    }
+    
+    // 空行または「合計」行はスキップ
+    if (!firstCell || firstCell === '' || firstCell === '合計') continue
     
     const name = colName !== -1 ? String(row[colName] || '').trim() : ''
     if (!name) continue
     
-    results.push({
+    const entry = {
       rank: colRank !== -1 ? parseInt(row[colRank]) || 0 : results.length + 1,
       name: name,
       team: colTeam !== -1 ? String(row[colTeam] || '').trim() : '',
       sales: colSales !== -1 ? parseAmount(row[colSales]) : 0,
       profit: colProfit !== -1 ? parseAmount(row[colProfit]) : 0,
       profitRate: colProfitRate !== -1 ? parsePercent(row[colProfitRate]) : 0
-    })
+    }
+    
+    results.push(entry)
+  }
+  
+  console.log(`[parseRankingSection] Parsed ${results.length} records`)
+  if (results.length > 0) {
+    console.log('[parseRankingSection] First record:', results[0])
   }
   
   return results

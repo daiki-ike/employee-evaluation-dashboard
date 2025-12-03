@@ -353,6 +353,25 @@ export const fetchDashboardData = async (spreadsheetUrl, sheetNames) => {
 // 以下は既存の評価システム用関数
 // =====================================
 
+/**
+ * 評価を数値に変換
+ * ◎=3, ○=2, △=1, ×=0
+ */
+export const convertEvaluationToNumber = (value) => {
+  if (typeof value === 'number') return value
+  const str = String(value || '').trim()
+  
+  switch (str) {
+    case '◎': return 3
+    case '○': return 2
+    case '△': return 1
+    case '×': return 0
+    default:
+      const num = parseFloat(str)
+      return isNaN(num) ? 0 : num
+  }
+}
+
 export const parseEvaluationData = (rawData, type) => {
   if (!rawData || rawData.length === 0) return []
 

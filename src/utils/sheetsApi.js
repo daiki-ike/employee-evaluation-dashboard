@@ -1,323 +1,369 @@
-// Google Sheets APIを使ってデータを取得する関数
+// Google Sheets API ユーティリティ - 修正版
+// 問題点: ヘッダー検出と金額パースのずれを修正
 
-export const fetchSheetData = async (spreadsheetUrl, sheetName, range = '') => {
-  try {
-    const spreadsheetId = extractSpreadsheetId(spreadsheetUrl)
+const GOOGLE_SHEETS_BASE_URL = 'https://docs.google.com/spreadsheets/d'
 
-    if (!spreadsheetId) {
-      throw new Error('無効なスプレッドシートURLです')
-    }
-
-    const apiUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`
-
-    const response = await fetch(apiUrl)
-    const text = await response.text()
-
-    const jsonString = text.substring(47, text.length - 2)
-    const data = JSON.parse(jsonString)
-
-    const parsedData = parseGoogleSheetsData(data)
-
-    console.log(`fetchSheetData - ${sheetName}: got ${parsedData.length} rows`)
-
-    return parsedData
-  } catch (error) {
-    console.error('Error fetching sheet data:', error)
-    throw error
-  }
-}
-
-const extractSpreadsheetId = (url) => {
+/**
+ * スプレッドシートIDをURLから抽出
+ */
+export const extractSpreadsheetId = (url) => {
   const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/)
   return match ? match[1] : null
 }
 
-const parseGoogleSheetsData = (data) => {
-  if (!data.table || !data.table.rows) {
-    return []
+/**
+ * Google Sheets の gviz API からデータを取得
+ */
+export const fetchSheetData = async (spreadsheetUrl, sheetName) => {
+  const spreadsheetId = extractSpreadsheetId(spreadsheetUrl)
+  if (!spreadsheetId) {
+    throw new Error('無効なスプレッドシートURLです')
   }
 
-  const rows = data.table.rows
-  const parsedData = []
+  const encodedSheetName = encodeURIComponent(sheetName)
+  const url = `${GOOGLE_SHEETS_BASE_URL}/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodedSheetName}`
 
-  rows.forEach(row => {
-    if (row.c) {
-      const rowData = row.c.map(cell => {
-        if (!cell) return null
-        return cell.v !== null ? cell.v : null
-      })
-      parsedData.push(rowData)
-    }
+  console.log(`[fetchSheetData] Fetching: ${sheetName}`)
+
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`シート「${sheetName}」の取得に失敗しました`)
+  }
+
+  const text = await response.text()
+  // gviz レスポンスから JSON を抽出
+  const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?$/)
+  if (!jsonMatch) {
+    throw new Error('データの解析に失敗しました')
+  }
+
+  const json = JSON.parse(jsonMatch[1])
+  const rows = json.table.rows || []
+  const cols = json.table.cols || []
+
+  // 2次元配列に変換
+  const data = rows.map(row => {
+    return row.c.map((cell, idx) => {
+      if (!cell) return ''
+      // 数値の場合はそのまま、フォーマット済み文字列がある場合はそれを使用
+      if (cell.f !== undefined && cell.f !== null) {
+        return cell.f
+      }
+      if (cell.v !== undefined && cell.v !== null) {
+        return cell.v
+      }
+      return ''
+    })
   })
 
-  return parsedData
+  console.log(`[fetchSheetData] ${sheetName}: ${data.length} rows`)
+  return data
 }
 
-// ============================================
-// ヘルパー関数
-// ============================================
-
-const parseNumericString = (str) => {
-  if (typeof str === 'number') return str
-  if (!str) return 0
-  const cleanStr = str.toString().replace(/[¥￥,%％\s　]/g, '')
-  const num = parseFloat(cleanStr)
+/**
+ * 金額文字列を数値に変換
+ * 例: "¥69,853,871" → 69853871
+ *     " ¥ 69,853,871 " → 69853871
+ */
+export const parseAmount = (value) => {
+  if (typeof value === 'number') return value
+  if (!value || value === '') return 0
+  
+  const str = String(value)
+    .replace(/[¥￥\s,]/g, '')  // ¥、スペース、カンマを除去
+    .trim()
+  
+  const num = parseFloat(str)
   return isNaN(num) ? 0 : num
 }
 
-const parsePercentString = (str) => {
-  if (typeof str === 'number') return str * 100  // 0.21 -> 21
-  if (!str) return 0
-  const cleanStr = str.toString().replace(/[%％\s]/g, '')
-  const num = parseFloat(cleanStr)
+/**
+ * パーセント文字列を数値に変換
+ * 例: "38.0%" → 38.0
+ *     "38%" → 38
+ */
+export const parsePercent = (value) => {
+  if (typeof value === 'number') return value
+  if (!value || value === '') return 0
+  
+  const str = String(value).replace('%', '').trim()
+  const num = parseFloat(str)
   return isNaN(num) ? 0 : num
 }
 
-// セクションタイトル（【】）を探す
-const findSectionRow = (rawData, keywords) => {
-  for (let i = 0; i < rawData.length; i++) {
-    const row = rawData[i]
-    if (!row) continue
-    for (let j = 0; j < row.length; j++) {
-      const cell = String(row[j] || '').trim()
-      // 全てのキーワードを含むかチェック
-      const matches = keywords.every(keyword => cell.includes(keyword))
+/**
+ * セクションを探す
+ * 【セクション名】の形式を検索
+ */
+const findSection = (data, sectionKeywords) => {
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i]
+    const firstCell = String(row[0] || '').trim()
+    
+    // 【】で囲まれているか確認
+    if (firstCell.startsWith('【') && firstCell.includes('】')) {
+      // キーワードのいずれかが含まれているか
+      const matches = sectionKeywords.some(keyword => firstCell.includes(keyword))
       if (matches) {
-        console.log(`Found section with keywords [${keywords.join(', ')}] at row ${i}: "${cell}"`)
+        console.log(`[findSection] Found: "${firstCell}" at row ${i}`)
         return i
       }
     }
   }
-  console.log(`Section with keywords [${keywords.join(', ')}] not found`)
+  console.log(`[findSection] Not found: ${sectionKeywords.join(', ')}`)
   return -1
 }
 
-// ============================================
-// 売上ランキングデータの変換（固定インデックス版）
-// ============================================
-
-export const convertSalesRankingData = (rawData, sheetName) => {
-  console.log(`convertSalesRankingData called for sheet: ${sheetName}`)
-  console.log(`Raw data rows: ${rawData?.length || 0}`)
-
-  if (!rawData || rawData.length < 2) {
-    console.log('No data to convert')
-    return []
+/**
+ * ヘッダー行から列インデックスを取得
+ * 複数の候補名に対応
+ */
+const findColumnIndex = (headers, ...candidates) => {
+  for (const candidate of candidates) {
+    const index = headers.findIndex(h => {
+      const header = String(h || '').trim()
+      return header === candidate || header.includes(candidate)
+    })
+    if (index !== -1) {
+      console.log(`[findColumnIndex] Found "${candidate}" at index ${index}`)
+      return index
+    }
   }
+  console.log(`[findColumnIndex] Not found: ${candidates.join(', ')}`)
+  return -1
+}
 
-  // セクションを探す（キーワードベースで柔軟に）
-  let sectionRow = -1
+/**
+ * 部門別サマリーをパース
+ */
+export const parseDepartmentSummary = (data) => {
+  console.log('[parseDepartmentSummary] Starting...')
   
-  if (sheetName === '全体') {
-    // 「全体」と「個人ランキング」の両方を含む行を探す
-    sectionRow = findSectionRow(rawData, ['全体', '個人ランキング'])
-  } else {
-    // 部門名と「個人ランキング」の両方を含む行を探す
-    sectionRow = findSectionRow(rawData, [sheetName, '個人ランキング'])
-  }
-
+  // 【部門別サマリー】または【チーム別サマリー】を探す
+  const sectionRow = findSection(data, ['部門別サマリー', 'チーム別サマリー'])
   if (sectionRow === -1) {
-    // フォールバック: 「個人ランキング」だけで探す
-    sectionRow = findSectionRow(rawData, ['個人ランキング'])
-  }
-
-  if (sectionRow === -1) {
-    console.log('No ranking section found')
+    console.warn('[parseDepartmentSummary] Section not found')
     return []
   }
 
   // ヘッダー行（セクションの次の行）
-  const headerRowIndex = sectionRow + 1
-  if (headerRowIndex >= rawData.length) {
-    console.log('No header row found')
-    return []
-  }
+  const headerRow = sectionRow + 1
+  if (headerRow >= data.length) return []
 
-  // データ行を収集（空行またはセクションタイトルまで）
-  const dataRows = []
-  for (let i = headerRowIndex + 1; i < rawData.length; i++) {
-    const row = rawData[i]
-    if (!row) break
+  const headers = data[headerRow]
+  console.log('[parseDepartmentSummary] Headers:', headers)
 
-    // 空行チェック
-    const isEmpty = row.every(cell => cell === null || cell === '' || cell === undefined)
-    if (isEmpty) break
+  // 列インデックスを取得
+  const colRank = findColumnIndex(headers, '順位')
+  const colDept = findColumnIndex(headers, '部門', 'チーム')
+  const colSales = findColumnIndex(headers, '売上高', '売上')
+  const colPayment = findColumnIndex(headers, '支払高', '支払')
+  const colProfit = findColumnIndex(headers, '粗利益', '粗利')
+  const colProfitRate = findColumnIndex(headers, '粗利益率', '粗利率')
+  const colSalesRatio = findColumnIndex(headers, '全体売上比率', '支社内売上比率', '売上比率')
+  const colProfitRatio = findColumnIndex(headers, '全体粗利比率', '支社内粗利比率', '粗利比率')
 
-    // セクションタイトルチェック
-    const firstCell = String(row[0] || '').trim()
-    if (firstCell.startsWith('【') || firstCell.startsWith('■')) break
-
-    dataRows.push(row)
-  }
-
-  console.log(`Data rows found: ${dataRows.length}`)
-
-  // 固定インデックスでデータを抽出
-  // 全体シート: 順位(0), 氏名(1), 売上額(2), 売上比率(3), 粗利額(4), 粗利比率(5), 粗利益率(6)
-  // 部門シート: 順位(0), 氏名(1), 所属チーム(2), 売上額(3), 売上比率(4), 粗利額(5), 粗利比率(6), 粗利益率(7)
+  const results = []
   
-  const isOverall = sheetName === '全体'
+  // データ行を処理（ヘッダーの次から）
+  for (let i = headerRow + 1; i < data.length; i++) {
+    const row = data[i]
+    const firstCell = String(row[0] || '').trim()
+    
+    // 次のセクションに到達したら終了
+    if (firstCell.startsWith('【')) break
+    // 空行または「合計」行はスキップ
+    if (!firstCell || firstCell === '' || firstCell === '合計') continue
+    // 順位が数字でない場合はスキップ
+    if (colRank !== -1 && isNaN(parseInt(row[colRank]))) continue
 
-  const results = dataRows.map(row => {
-    if (isOverall) {
-      return {
-        rank: parseNumericString(row[0]),
-        name: String(row[1] || '').trim(),
-        team: '',
-        sales: parseNumericString(row[2]),
-        share: parsePercentString(row[3]),
-        profit: parseNumericString(row[4]),
-        profitShare: parsePercentString(row[5]),
-        profitRate: parsePercentString(row[6]),
-        department: sheetName,
-        achievement: 0,
-        yoy: 0
-      }
-    } else {
-      return {
-        rank: parseNumericString(row[0]),
-        name: String(row[1] || '').trim(),
-        team: String(row[2] || '').trim(),
-        sales: parseNumericString(row[3]),
-        share: parsePercentString(row[4]),
-        profit: parseNumericString(row[5]),
-        profitShare: parsePercentString(row[6]),
-        profitRate: parsePercentString(row[7]),
-        department: sheetName,
-        achievement: 0,
-        yoy: 0
-      }
-    }
-  }).filter(item => item.name && item.rank > 0)
+    const dept = colDept !== -1 ? String(row[colDept] || '').trim() : ''
+    if (!dept) continue
 
-  console.log(`Converted ${results.length} records for ${sheetName}`)
-  if (results.length > 0) {
-    console.log('First record:', JSON.stringify(results[0]))
+    results.push({
+      rank: colRank !== -1 ? parseInt(row[colRank]) || 0 : results.length + 1,
+      department: dept,
+      sales: colSales !== -1 ? parseAmount(row[colSales]) : 0,
+      payment: colPayment !== -1 ? parseAmount(row[colPayment]) : 0,
+      profit: colProfit !== -1 ? parseAmount(row[colProfit]) : 0,
+      profitRate: colProfitRate !== -1 ? parsePercent(row[colProfitRate]) : 0,
+      salesRatio: colSalesRatio !== -1 ? parsePercent(row[colSalesRatio]) : 0,
+      profitRatio: colProfitRatio !== -1 ? parsePercent(row[colProfitRatio]) : 0
+    })
   }
 
+  console.log('[parseDepartmentSummary] Results:', results.length)
   return results
 }
 
-// 複数シートから売上データを読み込む
-export const fetchAllSalesSheets = async (spreadsheetUrl) => {
-  const sheetNames = ['全体', '東京', '大阪', '名古屋', '畠山部']
-
-  try {
-    const results = await Promise.all(
-      sheetNames.map(async (sheetName) => {
-        try {
-          const rawData = await fetchSheetData(spreadsheetUrl, sheetName)
-          const convertedData = convertSalesRankingData(rawData, sheetName)
-          return { sheetName, data: convertedData, success: true }
-        } catch (error) {
-          console.error(`Error fetching ${sheetName}:`, error)
-          return { sheetName, data: [], success: false, error: error.message }
-        }
-      })
-    )
-
-    const salesData = {
-      overall: [],
-      tokyo: [],
-      osaka: [],
-      nagoya: [],
-      hatakeyama: [],
-      errors: []
-    }
-
-    results.forEach(result => {
-      if (result.success) {
-        switch (result.sheetName) {
-          case '全体':
-            salesData.overall = result.data
-            break
-          case '東京':
-            salesData.tokyo = result.data
-            break
-          case '大阪':
-            salesData.osaka = result.data
-            break
-          case '名古屋':
-            salesData.nagoya = result.data
-            break
-          case '畠山部':
-            salesData.hatakeyama = result.data
-            break
-        }
-      } else {
-        salesData.errors.push({
-          sheet: result.sheetName,
-          error: result.error
-        })
-      }
-    })
-
-    // 結果のサマリーをログ出力
-    console.log('=== Sales Data Summary ===')
-    console.log(`Overall: ${salesData.overall.length} records`)
-    console.log(`Tokyo: ${salesData.tokyo.length} records`)
-    console.log(`Osaka: ${salesData.osaka.length} records`)
-    console.log(`Nagoya: ${salesData.nagoya.length} records`)
-    console.log(`Hatakeyama: ${salesData.hatakeyama.length} records`)
-    if (salesData.errors.length > 0) {
-      console.log(`Errors: ${salesData.errors.length}`)
-    }
-
-    return salesData
-  } catch (error) {
-    console.error('Error fetching all sales sheets:', error)
-    throw error
-  }
-}
-
-// ============================================
-// 評価関連の関数（既存のまま）
-// ============================================
-
-export const convertEvaluationToNumber = (text) => {
-  if (!text) return 0
-
-  const textStr = String(text).trim()
-
-  if (textStr === '出来ていた') return 1.0
-  if (textStr === 'やや出来ていた') return 0.7
-  if (textStr === 'やや出来ていない') return 0.3
-  if (textStr === '出来なかった') return 0.0
-  if (textStr === '対象外') return 0.0
-  if (textStr === '管理部門対象外') return 0.0
-
-  return 0
-}
-
-export const convertToStructuredData = (rawData, type) => {
-  if (!rawData || rawData.length === 0) {
+/**
+ * 個人ランキングをパース
+ */
+export const parsePersonalRanking = (data, sectionKeywords = ['個人ランキング']) => {
+  console.log('[parsePersonalRanking] Starting with keywords:', sectionKeywords)
+  
+  const sectionRow = findSection(data, sectionKeywords)
+  if (sectionRow === -1) {
+    console.warn('[parsePersonalRanking] Section not found')
     return []
   }
 
-  console.log(`convertToStructuredData - type: ${type}, rawData length: ${rawData.length}`)
+  // ヘッダー行（セクションの次の行）
+  const headerRow = sectionRow + 1
+  if (headerRow >= data.length) return []
 
-  if (type === 'sales') {
+  const headers = data[headerRow]
+  console.log('[parsePersonalRanking] Headers:', headers.slice(0, 10))
+
+  // 列インデックスを取得
+  const colRank = findColumnIndex(headers, '順位')
+  const colName = findColumnIndex(headers, '氏名', '名前')
+  const colTeam = findColumnIndex(headers, '所属チーム', 'チーム', '部署')
+  const colSales = findColumnIndex(headers, '売上額', '売上')
+  const colSalesRatio = findColumnIndex(headers, '売上全体比率', '部内売上比率', '売上比率')
+  const colProfit = findColumnIndex(headers, '粗利額', '粗利益額', '粗利')
+  const colProfitRatio = findColumnIndex(headers, '粗利全体比率', '部内粗利比率', '粗利比率')
+  const colProfitRate = findColumnIndex(headers, '粗利益率', '粗利率')
+
+  console.log('[parsePersonalRanking] Column indices:', {
+    rank: colRank, name: colName, team: colTeam,
+    sales: colSales, salesRatio: colSalesRatio,
+    profit: colProfit, profitRatio: colProfitRatio, profitRate: colProfitRate
+  })
+
+  const results = []
+  
+  // データ行を処理
+  for (let i = headerRow + 1; i < data.length; i++) {
+    const row = data[i]
+    const firstCell = String(row[0] || '').trim()
+    
+    // 次のセクションに到達したら終了
+    if (firstCell.startsWith('【')) break
+    // 空行はスキップ
+    if (!firstCell || firstCell === '') continue
+    
+    // 氏名が空の場合はスキップ
+    const name = colName !== -1 ? String(row[colName] || '').trim() : ''
+    if (!name) continue
+
+    const entry = {
+      rank: colRank !== -1 ? parseInt(row[colRank]) || 0 : results.length + 1,
+      name: name,
+      team: colTeam !== -1 ? String(row[colTeam] || '').trim() : '',
+      sales: colSales !== -1 ? parseAmount(row[colSales]) : 0,
+      salesRatio: colSalesRatio !== -1 ? parsePercent(row[colSalesRatio]) : 0,
+      profit: colProfit !== -1 ? parseAmount(row[colProfit]) : 0,
+      profitRatio: colProfitRatio !== -1 ? parsePercent(row[colProfitRatio]) : 0,
+      profitRate: colProfitRate !== -1 ? parsePercent(row[colProfitRate]) : 0
+    }
+
+    console.log(`[parsePersonalRanking] Row ${i}: ${entry.name}, sales=${entry.sales}, profit=${entry.profit}`)
+    results.push(entry)
+  }
+
+  console.log('[parsePersonalRanking] Total results:', results.length)
+  return results
+}
+
+/**
+ * 全てのランキングセクションを取得
+ */
+export const parseAllRankings = (data) => {
+  console.log('[parseAllRankings] Starting...')
+  
+  const sections = []
+  
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i]
+    const firstCell = String(row[0] || '').trim()
+    
+    // 【xxx個人ランキング】または【xxxランキング】を探す
+    if (firstCell.startsWith('【') && firstCell.includes('ランキング') && firstCell.includes('】')) {
+      // セクション名を抽出
+      const sectionName = firstCell.replace(/【|】/g, '').trim()
+      if (!sectionName || sectionName === '') continue
+      
+      console.log(`[parseAllRankings] Found section: ${sectionName} at row ${i}`)
+      
+      // このセクションのデータを抽出
+      const sectionData = data.slice(i)
+      const ranking = parsePersonalRanking(sectionData, [sectionName])
+      
+      if (ranking.length > 0) {
+        sections.push({
+          sectionName,
+          data: ranking
+        })
+      }
+    }
+  }
+  
+  console.log('[parseAllRankings] Total sections found:', sections.length)
+  return sections
+}
+
+/**
+ * シートからダッシュボード用データを取得
+ */
+export const fetchDashboardData = async (spreadsheetUrl, sheetNames) => {
+  console.log('[fetchDashboardData] Starting...')
+  
+  const result = {
+    departments: [],      // 部門別サマリー
+    overallRanking: [],   // 全体個人ランキング
+    departmentRankings: {}, // 部門別個人ランキング
+    errors: []
+  }
+
+  for (const sheetName of sheetNames) {
+    try {
+      console.log(`[fetchDashboardData] Processing sheet: ${sheetName}`)
+      const data = await fetchSheetData(spreadsheetUrl, sheetName)
+      
+      if (sheetName === '全体') {
+        // 全体シートから部門別サマリーと全体ランキングを取得
+        result.departments = parseDepartmentSummary(data)
+        result.overallRanking = parsePersonalRanking(data, ['全体 個人ランキング', '個人ランキング'])
+      } else {
+        // 各部門シートからチーム別サマリーと個人ランキングを取得
+        const teamSummary = parseDepartmentSummary(data)
+        const allRankings = parseAllRankings(data)
+        
+        result.departmentRankings[sheetName] = {
+          teamSummary,
+          rankings: allRankings
+        }
+      }
+    } catch (error) {
+      console.error(`[fetchDashboardData] Error in sheet ${sheetName}:`, error)
+      result.errors.push({ sheet: sheetName, error: error.message })
+    }
+  }
+
+  console.log('[fetchDashboardData] Complete')
+  console.log('  - Departments:', result.departments.length)
+  console.log('  - Overall ranking:', result.overallRanking.length)
+  console.log('  - Department rankings:', Object.keys(result.departmentRankings))
+  
+  return result
+}
+
+// =====================================
+// 以下は既存の評価システム用関数
+// =====================================
+
+export const parseEvaluationData = (rawData, type) => {
+  if (!rawData || rawData.length === 0) return []
+
+  if (type === 'master') {
     const headers = rawData[0]
-    return rawData.slice(1).map(row => ({
-      name: row[0],
-      department: row[1],
-      year: row[2],
-      sales: parseFloat(row[3]) || 0,
-      profit: parseFloat(row[4]) || 0
-    }))
-  } else if (type === 'evaluationMaster') {
-    if (rawData.length < 2) return []
-
-    const headers = rawData[0].map(h => String(h).trim())
-
-    const findIndex = (keywords) => headers.findIndex(h => keywords.some(k => h.includes(k)))
-
     const idx = {
-      categoryNo: findIndex(['大項目番号', 'No', 'CategoryNo']),
-      major: findIndex(['大項目', '大カテゴリ', 'Major']),
-      minor: findIndex(['中項目', '中カテゴリ', 'Minor']),
-      criteria: findIndex(['審査内容', '評価基準', '内容', 'Criteria']),
-      questionNo: findIndex(['設問番号', '質問番号', 'QuestionNo', 'No.'])
+      categoryNo: headers.findIndex(h => String(h).includes('カテゴリNo')),
+      major: headers.findIndex(h => String(h).includes('大カテゴリ')),
+      minor: headers.findIndex(h => String(h).includes('小カテゴリ')),
+      criteria: headers.findIndex(h => String(h).includes('審査内容')),
+      questionNo: headers.findIndex(h => String(h).includes('設問No'))
     }
 
     return rawData.slice(1).filter(row => row.length >= 5).map(row => ({

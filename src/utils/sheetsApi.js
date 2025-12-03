@@ -24,6 +24,7 @@ export const fetchSheetData = async (spreadsheetUrl, sheetName) => {
   const url = `${GOOGLE_SHEETS_BASE_URL}/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodedSheetName}`
 
   console.log(`[fetchSheetData] Fetching: ${sheetName}`)
+  console.log(`[fetchSheetData] URL: ${url}`)
 
   const response = await fetch(url)
   if (!response.ok) {
@@ -31,15 +32,26 @@ export const fetchSheetData = async (spreadsheetUrl, sheetName) => {
   }
 
   const text = await response.text()
+  console.log(`[fetchSheetData] Response length: ${text.length} chars`)
+  
   // gviz レスポンスから JSON を抽出
   const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?$/)
   if (!jsonMatch) {
+    console.error('[fetchSheetData] Failed to parse response. First 500 chars:', text.substring(0, 500))
     throw new Error('データの解析に失敗しました')
   }
 
   const json = JSON.parse(jsonMatch[1])
   const rows = json.table.rows || []
   const cols = json.table.cols || []
+
+  console.log(`[fetchSheetData] Columns:`, cols.map(c => c.label || c.id))
+  console.log(`[fetchSheetData] Total rows from API: ${rows.length}`)
+  
+  // 最初の行の生データを確認
+  if (rows.length > 0) {
+    console.log('[fetchSheetData] First row raw:', JSON.stringify(rows[0]).substring(0, 300))
+  }
 
   // 2次元配列に変換
   const data = rows.map(row => {
@@ -56,7 +68,13 @@ export const fetchSheetData = async (spreadsheetUrl, sheetName) => {
     })
   })
 
-  console.log(`[fetchSheetData] ${sheetName}: ${data.length} rows`)
+  console.log(`[fetchSheetData] ${sheetName}: ${data.length} rows converted`)
+  
+  // 最初の行の変換後データを確認
+  if (data.length > 0) {
+    console.log('[fetchSheetData] First row converted:', data[0].slice(0, 5))
+  }
+  
   return data
 }
 
@@ -437,24 +455,32 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
       console.log(`[fetchAllSalesSheets] Fetching sheet: ${sheetName}`)
       const data = await fetchSheetData(spreadsheetUrl, sheetName)
       
-      console.log(`[fetchAllSalesSheets] ${sheetName} first 5 rows:`)
-      data.slice(0, 5).forEach((row, idx) => {
-        console.log(`  Row ${idx}: ${String(row[0] || '').substring(0, 50)}`)
-      })
+      console.log(`[fetchAllSalesSheets] ${sheetName} data type:`, typeof data, Array.isArray(data))
+      console.log(`[fetchAllSalesSheets] ${sheetName} length:`, data.length)
+      
+      // 最初の15行をログ出力（セクションを見つけるため）
+      console.log(`[fetchAllSalesSheets] ${sheetName} first 15 rows:`)
+      for (let i = 0; i < Math.min(15, data.length); i++) {
+        const row = data[i]
+        const cells = row ? row.slice(0, 5).map(c => String(c || '').substring(0, 20)) : ['(empty row)']
+        console.log(`  Row ${i}: [${cells.join(' | ')}]`)
+      }
       
       // 全てのランキングセクションからデータを取得
       const allRankings = []
       
       for (let i = 0; i < data.length; i++) {
         const row = data[i]
-        const firstCell = String(row[0] || '').trim()
+        if (!row || !row[0]) continue
         
-        // 【】で始まるセクションをログ出力
+        const firstCell = String(row[0]).trim()
+        
+        // 【】で始まるセクションを全てログ出力
         if (firstCell.startsWith('【')) {
           console.log(`[fetchAllSalesSheets] Found section at row ${i}: "${firstCell}"`)
         }
         
-        // ランキングセクションを探す（「個人ランキング」または「ランキング」を含む）
+        // ランキングセクションを探す（「個人ランキング」を含む）
         if (firstCell.startsWith('【') && firstCell.includes('】')) {
           if (firstCell.includes('個人ランキング') || 
               (firstCell.includes('ランキング') && !firstCell.includes('サマリー'))) {

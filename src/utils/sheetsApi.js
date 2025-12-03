@@ -439,7 +439,7 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
     tokyo: [],
     osaka: [],
     nagoya: [],
-    hatakeyama: []
+    kikakukaihatsu: []
   }
 
   const sheetMapping = {
@@ -447,7 +447,7 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
     '東京': 'tokyo',
     '大阪': 'osaka',
     '名古屋': 'nagoya',
-    '企画開発': 'hatakeyama'
+    '企画開発': 'kikakukaihatsu'
   }
 
   for (const sheetName of sheetNames) {
@@ -510,7 +510,7 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
     tokyo: result.tokyo.length,
     osaka: result.osaka.length,
     nagoya: result.nagoya.length,
-    hatakeyama: result.hatakeyama.length
+    kikakukaihatsu: result.kikakukaihatsu.length
   })
   return result
 }

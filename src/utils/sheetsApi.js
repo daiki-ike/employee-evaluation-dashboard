@@ -409,6 +409,154 @@ export const parseEvaluationData = (rawData, type) => {
   return rawData
 }
 
+/**
+ * 全シートから売上データを取得
+ * DataUpload.jsxから呼び出される
+ */
+export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体', '東京', '大阪', '名古屋', '企画開発']) => {
+  console.log('[fetchAllSalesSheets] Starting...')
+  
+  const result = {
+    overall: [],
+    tokyo: [],
+    osaka: [],
+    nagoya: [],
+    hatakeyama: []
+  }
+
+  const sheetMapping = {
+    '全体': 'overall',
+    '東京': 'tokyo',
+    '大阪': 'osaka',
+    '名古屋': 'nagoya',
+    '企画開発': 'hatakeyama'
+  }
+
+  for (const sheetName of sheetNames) {
+    try {
+      console.log(`[fetchAllSalesSheets] Fetching sheet: ${sheetName}`)
+      const data = await fetchSheetData(spreadsheetUrl, sheetName)
+      
+      // 全てのランキングセクションからデータを取得
+      const allRankings = []
+      
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i]
+        const firstCell = String(row[0] || '').trim()
+        
+        // ランキングセクションを探す
+        if (firstCell.startsWith('【') && firstCell.includes('ランキング') && firstCell.includes('】')) {
+          const sectionData = data.slice(i)
+          const ranking = parseRankingSection(sectionData)
+          allRankings.push(...ranking)
+        }
+      }
+      
+      const key = sheetMapping[sheetName] || sheetName.toLowerCase()
+      if (result[key] !== undefined) {
+        result[key] = allRankings
+      }
+      
+      console.log(`[fetchAllSalesSheets] ${sheetName}: ${allRankings.length} records`)
+    } catch (error) {
+      console.error(`[fetchAllSalesSheets] Error fetching ${sheetName}:`, error)
+    }
+  }
+
+  console.log('[fetchAllSalesSheets] Complete')
+  return result
+}
+
+/**
+ * ランキングセクションをパース（内部関数）
+ */
+const parseRankingSection = (data) => {
+  if (!data || data.length < 2) return []
+  
+  // 最初の行はセクションタイトル、次の行はヘッダー
+  const headers = data[1]
+  
+  const colRank = headers.findIndex(h => String(h || '').includes('順位'))
+  const colName = headers.findIndex(h => String(h || '').includes('氏名') || String(h || '').includes('名前'))
+  const colTeam = headers.findIndex(h => String(h || '').includes('所属') || String(h || '').includes('チーム'))
+  const colSales = headers.findIndex(h => String(h || '').includes('売上額') || String(h || '').includes('売上高'))
+  const colProfit = headers.findIndex(h => String(h || '').includes('粗利額') || String(h || '').includes('粗利益'))
+  const colProfitRate = headers.findIndex(h => String(h || '').includes('粗利益率') || String(h || '').includes('粗利率'))
+  
+  const results = []
+  
+  for (let i = 2; i < data.length; i++) {
+    const row = data[i]
+    const firstCell = String(row[0] || '').trim()
+    
+    // 次のセクションに到達したら終了
+    if (firstCell.startsWith('【')) break
+    // 空行はスキップ
+    if (!firstCell || firstCell === '') continue
+    
+    const name = colName !== -1 ? String(row[colName] || '').trim() : ''
+    if (!name) continue
+    
+    results.push({
+      rank: colRank !== -1 ? parseInt(row[colRank]) || 0 : results.length + 1,
+      name: name,
+      team: colTeam !== -1 ? String(row[colTeam] || '').trim() : '',
+      sales: colSales !== -1 ? parseAmount(row[colSales]) : 0,
+      profit: colProfit !== -1 ? parseAmount(row[colProfit]) : 0,
+      profitRate: colProfitRate !== -1 ? parsePercent(row[colProfitRate]) : 0
+    })
+  }
+  
+  return results
+}
+
+/**
+ * 生データを構造化データに変換
+ * DataUpload.jsxから呼び出される
+ */
+export const convertToStructuredData = (rawData, type) => {
+  console.log(`[convertToStructuredData] Converting type: ${type}`)
+  
+  if (!rawData || rawData.length === 0) {
+    console.warn('[convertToStructuredData] No data to convert')
+    return []
+  }
+
+  // 評価データの場合
+  if (type === 'master' || type === 'selfEvaluation' || type === 'managerEvaluation' || type === 'totalScore') {
+    return parseEvaluationData(rawData, type)
+  }
+
+  // 売上データの場合
+  if (type === 'sales' || type === 'ranking') {
+    return convertSalesData(rawData)
+  }
+
+  // デフォルト: そのまま返す
+  return rawData
+}
+
+/**
+ * 売上データを変換（内部関数）
+ */
+const convertSalesData = (rawData) => {
+  const results = []
+  
+  for (let i = 0; i < rawData.length; i++) {
+    const row = rawData[i]
+    const firstCell = String(row[0] || '').trim()
+    
+    // ランキングセクションを探す
+    if (firstCell.startsWith('【') && firstCell.includes('ランキング')) {
+      const sectionData = rawData.slice(i)
+      const ranking = parseRankingSection(sectionData)
+      results.push(...ranking)
+    }
+  }
+  
+  return results
+}
+
 export const mergeEvaluationData = (masterData, selfData, managerData, scoreData) => {
   const employees = {}
 

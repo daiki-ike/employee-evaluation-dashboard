@@ -8,7 +8,7 @@ const DEPARTMENT_COLORS = {
   '東京': '#667eea',
   '大阪': '#48bb78',
   '名古屋': '#f6ad55',
-  '畠山部': '#fc8181'
+  '企画開発': '#fc8181'
 }
 
 const Dashboard = ({ user, salesRanking }) => {
@@ -36,7 +36,7 @@ const Dashboard = ({ user, salesRanking }) => {
         '東京': 'tokyo',
         '大阪': 'osaka',
         '名古屋': 'nagoya',
-        '畠山部': 'hatakeyama'
+        '企画開発': 'kikakukaihatsu'
       }
       const key = deptMap[user.department]
       return rankingData[key] || []
@@ -73,12 +73,12 @@ const Dashboard = ({ user, salesRanking }) => {
     const data = top5.map(item => ({
       name: item.name,
       value: item.sales || 0,
-      share: item.share || 0
+      share: item.salesRatio || 0
     }))
 
     if (others.length > 0) {
       const othersSales = others.reduce((sum, item) => sum + (item.sales || 0), 0)
-      const othersShare = others.reduce((sum, item) => sum + (item.share || 0), 0)
+      const othersShare = others.reduce((sum, item) => sum + (item.salesRatio || 0), 0)
       data.push({
         name: 'その他',
         value: othersSales,
@@ -93,6 +93,17 @@ const Dashboard = ({ user, salesRanking }) => {
   const top10Data = useMemo(() => {
     if (!currentData) return []
     return currentData.slice(0, 10)
+  }, [currentData])
+
+  // 詳細ランキング用グラフデータ（売上・粗利比較）
+  const rankingChartData = useMemo(() => {
+    if (!currentData || currentData.length === 0) return []
+    // 上位15名のデータを取得
+    return currentData.slice(0, 15).map(item => ({
+      name: item.name,
+      sales: item.sales || 0,
+      profit: item.profit || 0
+    }))
   }, [currentData])
 
   const formatCurrency = (value) => {
@@ -161,10 +172,10 @@ const Dashboard = ({ user, salesRanking }) => {
             名古屋
           </button>
           <button
-            className={`tab-btn ${selectedTab === 'hatakeyama' ? 'active' : ''}`}
-            onClick={() => setSelectedTab('hatakeyama')}
+            className={`tab-btn ${selectedTab === 'kikakukaihatsu' ? 'active' : ''}`}
+            onClick={() => setSelectedTab('kikakukaihatsu')}
           >
-            畠山部
+            企画開発
           </button>
         </div>
       )}
@@ -204,7 +215,7 @@ const Dashboard = ({ user, salesRanking }) => {
         {/* 売上シェア円グラフ */}
         {shareData.length > 0 && (
           <div className="chart-section">
-            <h3>売上シェア（全体内%）</h3>
+            <h3>売上シェア（全体内%） </h3>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
@@ -228,8 +239,8 @@ const Dashboard = ({ user, salesRanking }) => {
           </div>
         )}
 
-        {/* トップ10売上ランキング */}
-        {top10Data.length > 0 && (
+        {/* トップ10売上ランキング - 全体タブ以外で表示 */}
+        {selectedTab !== 'overall' && top10Data.length > 0 && (
           <div className="chart-section">
             <h3>トップ10売上ランキング</h3>
             <ResponsiveContainer width="100%" height={400}>
@@ -244,6 +255,24 @@ const Dashboard = ({ user, salesRanking }) => {
           </div>
         )}
       </div>
+
+      {/* 詳細ランキング用グラフ（売上・粗利比較） */}
+      {rankingChartData.length > 0 && (
+        <div className="ranking-chart-section">
+          <h3>売上・粗利比較（上位15名）</h3>
+          <ResponsiveContainer width="100%" height={400}>
+            <BarChart data={rankingChartData} layout="vertical">
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`} />
+              <YAxis type="category" dataKey="name" width={100} />
+              <Tooltip formatter={(value) => formatCurrency(value)} />
+              <Legend />
+              <Bar dataKey="sales" name="売上" fill="#667eea" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="profit" name="粗利益" fill="#48bb78" radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* ランキングテーブル */}
       <div className="ranking-table-section">
@@ -274,11 +303,11 @@ const Dashboard = ({ user, salesRanking }) => {
                   <td className="name-cell">{item.name}</td>
                   <td className="number-cell">{formatCurrency(item.sales)}</td>
                   <td className="number-cell">
-                    {item.share ? `${item.share.toFixed(2)}%` : '-'}
+                    {item.salesRatio ? `${item.salesRatio.toFixed(2)}%` : '-'}
                   </td>
                   <td className="number-cell">{formatCurrency(item.profit)}</td>
                   <td className="number-cell">
-                    {item.profitShare ? `${item.profitShare.toFixed(2)}%` : '-'}
+                    {item.profitRatio ? `${item.profitRatio.toFixed(2)}%` : '-'}
                   </td>
                   <td className="number-cell">
                     {item.profitRate ? `${item.profitRate.toFixed(1)}%` : '-'}

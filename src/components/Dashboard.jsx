@@ -256,24 +256,6 @@ const Dashboard = ({ user, salesRanking }) => {
         )}
       </div>
 
-      {/* 詳細ランキング用グラフ（売上・粗利比較） */}
-      {rankingChartData.length > 0 && (
-        <div className="ranking-chart-section">
-          <h3>売上・粗利比較（上位15名）</h3>
-          <ResponsiveContainer width="100%" height={400}>
-            <BarChart data={rankingChartData} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis type="number" tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`} />
-              <YAxis type="category" dataKey="name" width={100} />
-              <Tooltip formatter={(value) => formatCurrency(value)} />
-              <Legend />
-              <Bar dataKey="sales" name="売上" fill="#667eea" radius={[0, 4, 4, 0]} />
-              <Bar dataKey="profit" name="粗利益" fill="#48bb78" radius={[0, 4, 4, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
       {/* ランキングテーブル */}
       <div className="ranking-table-section">
         <h3>詳細ランキング</h3>
@@ -288,32 +270,60 @@ const Dashboard = ({ user, salesRanking }) => {
                 <th>粗利益</th>
                 <th>粗利比率</th>
                 <th>粗利益率</th>
+                {selectedTab === 'overall' && <th className="chart-header">売上・粗利グラフ</th>}
               </tr>
             </thead>
             <tbody>
-              {currentData.map((item, index) => (
-                <tr key={index} className={index < 3 ? 'top-rank' : ''}>
-                  <td className="rank-cell">
-                    {index < 3 ? (
-                      <span className={`rank-badge rank-${index + 1}`}>{item.rank}</span>
-                    ) : (
-                      <span className="rank-number">{item.rank}</span>
+              {currentData.map((item, index) => {
+                // 全体タブ用：最大値を計算してバーの幅を決定
+                const maxSales = Math.max(...currentData.map(d => d.sales || 0))
+                const salesWidth = maxSales > 0 ? ((item.sales || 0) / maxSales * 100) : 0
+                const profitWidth = maxSales > 0 ? ((item.profit || 0) / maxSales * 100) : 0
+                
+                return (
+                  <tr key={index} className={index < 3 ? 'top-rank' : ''}>
+                    <td className="rank-cell">
+                      {index < 3 ? (
+                        <span className={`rank-badge rank-${index + 1}`}>{item.rank}</span>
+                      ) : (
+                        <span className="rank-number">{item.rank}</span>
+                      )}
+                    </td>
+                    <td className="name-cell">{item.name}</td>
+                    <td className="number-cell">{formatCurrency(item.sales)}</td>
+                    <td className="number-cell">
+                      {item.salesRatio ? `${item.salesRatio.toFixed(2)}%` : '-'}
+                    </td>
+                    <td className="number-cell">{formatCurrency(item.profit)}</td>
+                    <td className="number-cell">
+                      {item.profitRatio ? `${item.profitRatio.toFixed(2)}%` : '-'}
+                    </td>
+                    <td className="number-cell">
+                      {item.profitRate ? `${item.profitRate.toFixed(1)}%` : '-'}
+                    </td>
+                    {selectedTab === 'overall' && (
+                      <td className="chart-cell">
+                        <div className="inline-chart">
+                          <div className="bar-row">
+                            <div 
+                              className="inline-bar sales-bar" 
+                              style={{ width: `${salesWidth}%` }}
+                              title={`売上: ${formatCurrency(item.sales)}`}
+                            />
+                          </div>
+                          <div className="bar-row">
+                            <div 
+                              className="inline-bar profit-bar" 
+                              style={{ width: `${profitWidth}%` }}
+                              title={`粗利: ${formatCurrency(item.profit)}`}
+                            />
+                          </div>
+                        </div>
+                      </td>
                     )}
-                  </td>
-                  <td className="name-cell">{item.name}</td>
-                  <td className="number-cell">{formatCurrency(item.sales)}</td>
-                  <td className="number-cell">
-                    {item.salesRatio ? `${item.salesRatio.toFixed(2)}%` : '-'}
-                  </td>
-                  <td className="number-cell">{formatCurrency(item.profit)}</td>
-                  <td className="number-cell">
-                    {item.profitRatio ? `${item.profitRatio.toFixed(2)}%` : '-'}
-                  </td>
-                  <td className="number-cell">
-                    {item.profitRate ? `${item.profitRate.toFixed(1)}%` : '-'}
-                  </td>
-                </tr>
-              ))}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

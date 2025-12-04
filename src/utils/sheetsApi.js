@@ -524,8 +524,10 @@ const parseRankingByHeader = (data) => {
       let colRank = headers.findIndex(h => String(h || '').includes('順位'))
       let colName = headers.findIndex(h => String(h || '').includes('氏名'))
       let colTeam = headers.findIndex(h => String(h || '').includes('所属') || String(h || '').includes('チーム'))
-      let colSales = headers.findIndex(h => String(h || '').includes('売上額') || String(h || '').includes('売上'))
-      let colProfit = headers.findIndex(h => String(h || '').includes('粗利額') || String(h || '').includes('粗利益'))
+      let colSales = headers.findIndex(h => String(h || '').includes('売上額') || String(h || '').includes('売上高'))
+      let colSalesRatio = headers.findIndex(h => String(h || '').includes('売上全体比率') || String(h || '').includes('売上比率'))
+      let colProfit = headers.findIndex(h => String(h || '').includes('粗利額') || String(h || '').includes('粗利益額'))
+      let colProfitRatio = headers.findIndex(h => String(h || '').includes('粗利全体比率') || String(h || '').includes('粗利比率'))
       let colProfitRate = headers.findIndex(h => String(h || '').includes('粗利益率') || String(h || '').includes('粗利率'))
       
       // 見つからない場合は固定インデックスを使用
@@ -534,12 +536,15 @@ const parseRankingByHeader = (data) => {
       if (colName === -1) colName = 1
       if (colTeam === -1) colTeam = 2
       if (colSales === -1) colSales = 3
+      if (colSalesRatio === -1) colSalesRatio = 4
       if (colProfit === -1) colProfit = 5
+      if (colProfitRatio === -1) colProfitRatio = 6
       if (colProfitRate === -1) colProfitRate = 7
       
       console.log('[parseRankingByHeader] Column indices (after fallback):', { 
         rank: colRank, name: colName, team: colTeam, 
-        sales: colSales, profit: colProfit, profitRate: colProfitRate 
+        sales: colSales, salesRatio: colSalesRatio,
+        profit: colProfit, profitRatio: colProfitRatio, profitRate: colProfitRate 
       })
       
       // ヘッダーの次の行からデータを読み取る
@@ -575,7 +580,9 @@ const parseRankingByHeader = (data) => {
           name: name,
           team: colTeam !== -1 ? String(dataRow[colTeam] || '').trim() : '',
           sales: colSales !== -1 ? parseAmount(dataRow[colSales]) : 0,
+          salesRatio: colSalesRatio !== -1 ? parsePercent(dataRow[colSalesRatio]) : 0,
           profit: colProfit !== -1 ? parseAmount(dataRow[colProfit]) : 0,
+          profitRatio: colProfitRatio !== -1 ? parsePercent(dataRow[colProfitRatio]) : 0,
           profitRate: colProfitRate !== -1 ? parsePercent(dataRow[colProfitRate]) : 0
         }
         

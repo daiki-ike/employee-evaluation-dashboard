@@ -519,14 +519,25 @@ const parseRankingByHeader = (data) => {
       
       // この行をヘッダーとしてデータをパース
       const headers = row
-      const colRank = headers.findIndex(h => String(h || '').includes('順位'))
-      const colName = headers.findIndex(h => String(h || '').includes('氏名'))
-      const colTeam = headers.findIndex(h => String(h || '').includes('所属') || String(h || '').includes('チーム'))
-      const colSales = headers.findIndex(h => String(h || '').includes('売上額') || String(h || '').includes('売上'))
-      const colProfit = headers.findIndex(h => String(h || '').includes('粗利額') || String(h || '').includes('粗利益'))
-      const colProfitRate = headers.findIndex(h => String(h || '').includes('粗利益率') || String(h || '').includes('粗利率'))
       
-      console.log('[parseRankingByHeader] Column indices:', { 
+      // 動的に検索
+      let colRank = headers.findIndex(h => String(h || '').includes('順位'))
+      let colName = headers.findIndex(h => String(h || '').includes('氏名'))
+      let colTeam = headers.findIndex(h => String(h || '').includes('所属') || String(h || '').includes('チーム'))
+      let colSales = headers.findIndex(h => String(h || '').includes('売上額') || String(h || '').includes('売上'))
+      let colProfit = headers.findIndex(h => String(h || '').includes('粗利額') || String(h || '').includes('粗利益'))
+      let colProfitRate = headers.findIndex(h => String(h || '').includes('粗利益率') || String(h || '').includes('粗利率'))
+      
+      // 見つからない場合は固定インデックスを使用
+      // スプレッドシート構造: 順位(0), 氏名(1), 所属チーム(2), 売上額(3), 売上比率(4), 粗利額(5), 粗利比率(6), 粗利益率(7)
+      if (colRank === -1) colRank = 0
+      if (colName === -1) colName = 1
+      if (colTeam === -1) colTeam = 2
+      if (colSales === -1) colSales = 3
+      if (colProfit === -1) colProfit = 5
+      if (colProfitRate === -1) colProfitRate = 7
+      
+      console.log('[parseRankingByHeader] Column indices (after fallback):', { 
         rank: colRank, name: colName, team: colTeam, 
         sales: colSales, profit: colProfit, profitRate: colProfitRate 
       })
@@ -568,7 +579,17 @@ const parseRankingByHeader = (data) => {
           profitRate: colProfitRate !== -1 ? parsePercent(dataRow[colProfitRate]) : 0
         }
         
-        console.log(`[parseRankingByHeader] Row ${j}: ${entry.name}, sales=${entry.sales}`)
+        // 最初の3件のみ詳細ログ
+        if (allResults.length < 3) {
+          console.log(`[parseRankingByHeader] Row ${j} raw values:`, {
+            rankRaw: dataRow[colRank],
+            nameRaw: dataRow[colName],
+            salesRaw: dataRow[colSales],
+            profitRaw: dataRow[colProfit]
+          })
+          console.log(`[parseRankingByHeader] Row ${j} parsed:`, entry)
+        }
+        
         allResults.push(entry)
       }
     }

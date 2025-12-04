@@ -455,50 +455,17 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
       console.log(`[fetchAllSalesSheets] Fetching sheet: ${sheetName}`)
       const data = await fetchSheetData(spreadsheetUrl, sheetName)
       
-      console.log(`[fetchAllSalesSheets] ${sheetName} data type:`, typeof data, Array.isArray(data))
       console.log(`[fetchAllSalesSheets] ${sheetName} length:`, data.length)
       
-      // 最初の15行をログ出力（セクションを見つけるため）
-      console.log(`[fetchAllSalesSheets] ${sheetName} first 15 rows:`)
-      for (let i = 0; i < Math.min(15, data.length); i++) {
-        const row = data[i]
-        const cells = row ? row.slice(0, 5).map(c => String(c || '').substring(0, 20)) : ['(empty row)']
-        console.log(`  Row ${i}: [${cells.join(' | ')}]`)
-      }
-      
-      // 全てのランキングセクションからデータを取得
-      const allRankings = []
-      
-      for (let i = 0; i < data.length; i++) {
-        const row = data[i]
-        if (!row || !row[0]) continue
-        
-        const firstCell = String(row[0]).trim()
-        
-        // 【】で始まるセクションを全てログ出力
-        if (firstCell.startsWith('【')) {
-          console.log(`[fetchAllSalesSheets] Found section at row ${i}: "${firstCell}"`)
-        }
-        
-        // ランキングセクションを探す（「個人ランキング」を含む）
-        if (firstCell.startsWith('【') && firstCell.includes('】')) {
-          if (firstCell.includes('個人ランキング') || 
-              (firstCell.includes('ランキング') && !firstCell.includes('サマリー'))) {
-            console.log(`[fetchAllSalesSheets] Parsing ranking section: "${firstCell}"`)
-            const sectionData = data.slice(i)
-            const ranking = parseRankingSection(sectionData)
-            console.log(`[fetchAllSalesSheets] Got ${ranking.length} records from this section`)
-            allRankings.push(...ranking)
-          }
-        }
-      }
+      // ヘッダー行（「氏名」を含む行）を探す
+      const rankings = parseRankingByHeader(data)
       
       const key = sheetMapping[sheetName] || sheetName.toLowerCase()
       if (result[key] !== undefined) {
-        result[key] = allRankings
+        result[key] = rankings
       }
       
-      console.log(`[fetchAllSalesSheets] ${sheetName}: ${allRankings.length} total records`)
+      console.log(`[fetchAllSalesSheets] ${sheetName}: ${rankings.length} total records`)
     } catch (error) {
       console.error(`[fetchAllSalesSheets] Error fetching ${sheetName}:`, error)
     }
@@ -513,6 +480,84 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
     kikakukaihatsu: result.kikakukaihatsu.length
   })
   return result
+}
+
+/**
+ * ヘッダー行を探してランキングデータをパース
+ * 【】セクションがなくても動作する
+ */
+const parseRankingByHeader = (data) => {
+  console.log('[parseRankingByHeader] Starting...')
+  
+  const allResults = []
+  
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i]
+    if (!row) continue
+    
+    // 「氏名」を含む行をヘッダーとして検出
+    const hasName = row.some(cell => String(cell || '').includes('氏名'))
+    const hasRank = row.some(cell => String(cell || '').includes('順位'))
+    
+    if (hasName && hasRank) {
+      console.log(`[parseRankingByHeader] Found header at row ${i}:`, row.slice(0, 6))
+      
+      // この行をヘッダーとしてデータをパース
+      const headers = row
+      const colRank = headers.findIndex(h => String(h || '').includes('順位'))
+      const colName = headers.findIndex(h => String(h || '').includes('氏名'))
+      const colTeam = headers.findIndex(h => String(h || '').includes('所属') || String(h || '').includes('チーム'))
+      const colSales = headers.findIndex(h => String(h || '').includes('売上額') || String(h || '').includes('売上'))
+      const colProfit = headers.findIndex(h => String(h || '').includes('粗利額') || String(h || '').includes('粗利益'))
+      const colProfitRate = headers.findIndex(h => String(h || '').includes('粗利益率') || String(h || '').includes('粗利率'))
+      
+      console.log('[parseRankingByHeader] Column indices:', { 
+        rank: colRank, name: colName, team: colTeam, 
+        sales: colSales, profit: colProfit, profitRate: colProfitRate 
+      })
+      
+      // ヘッダーの次の行からデータを読み取る
+      for (let j = i + 1; j < data.length; j++) {
+        const dataRow = data[j]
+        if (!dataRow) continue
+        
+        // 次のヘッダー行に到達したら終了
+        const isNextHeader = dataRow.some(cell => String(cell || '').includes('氏名'))
+        if (isNextHeader && j > i + 1) {
+          console.log(`[parseRankingByHeader] Hit next header at row ${j}, stopping this section`)
+          break
+        }
+        
+        // 名前が空ならスキップ
+        const name = colName !== -1 ? String(dataRow[colName] || '').trim() : ''
+        if (!name) continue
+        
+        // 順位が数字でなければスキップ（ヘッダーや空行を除外）
+        const rankValue = colRank !== -1 ? dataRow[colRank] : j - i
+        const rank = parseInt(rankValue) || 0
+        if (rank === 0) continue
+        
+        const entry = {
+          rank: rank,
+          name: name,
+          team: colTeam !== -1 ? String(dataRow[colTeam] || '').trim() : '',
+          sales: colSales !== -1 ? parseAmount(dataRow[colSales]) : 0,
+          profit: colProfit !== -1 ? parseAmount(dataRow[colProfit]) : 0,
+          profitRate: colProfitRate !== -1 ? parsePercent(dataRow[colProfitRate]) : 0
+        }
+        
+        allResults.push(entry)
+      }
+    }
+  }
+  
+  console.log(`[parseRankingByHeader] Total parsed: ${allResults.length} records`)
+  if (allResults.length > 0) {
+    console.log('[parseRankingByHeader] First record:', allResults[0])
+    console.log('[parseRankingByHeader] Last record:', allResults[allResults.length - 1])
+  }
+  
+  return allResults
 }
 
 /**

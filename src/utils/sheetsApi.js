@@ -450,3 +450,20 @@ export const getEvaluationDataFromStorage = () => {
     return null
   }
 }
+
+/**
+ * 評価文字列を数値に変換
+ */
+export const convertEvaluationToNumber = (evaluation) => {
+  const mapping = {
+    'S': 5,
+    'A': 4,
+    'B': 3,
+    'C': 2,
+    'D': 1,
+    '': 0,
+    null: 0,
+    undefined: 0
+  }
+  return mapping[evaluation] !== undefined ? mapping[evaluation] : 0
+}

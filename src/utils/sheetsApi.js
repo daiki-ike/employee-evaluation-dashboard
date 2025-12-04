@@ -467,3 +467,48 @@ export const convertEvaluationToNumber = (evaluation) => {
   }
   return mapping[evaluation] !== undefined ? mapping[evaluation] : 0
 }
+
+/**
+ * 生データを構造化データに変換
+ */
+export const convertToStructuredData = (rawData, type) => {
+  if (!rawData || rawData.length === 0) return []
+  
+  if (type === 'master') {
+    return rawData.slice(1).map(row => ({
+      id: row[0],
+      name: row[1],
+      department: row[2],
+      position: row[3],
+      role: row[4]
+    }))
+  }
+  
+  if (type === 'evaluation') {
+    return rawData
+  }
+  
+  return rawData
+}
+
+/**
+ * 評価データをマージ
+ */
+export const mergeEvaluationData = (existingData, newData) => {
+  if (!existingData || existingData.length === 0) return newData
+  if (!newData || newData.length === 0) return existingData
+  
+  // 新しいデータで既存データを上書き
+  const merged = [...existingData]
+  
+  newData.forEach(newRow => {
+    const existingIndex = merged.findIndex(row => row[0] === newRow[0])
+    if (existingIndex >= 0) {
+      merged[existingIndex] = newRow
+    } else {
+      merged.push(newRow)
+    }
+  })
+  
+  return merged
+}

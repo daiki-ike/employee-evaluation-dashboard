@@ -487,7 +487,15 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
  * 【】セクションがなくても動作する
  */
 const parseRankingByHeader = (data) => {
-  console.log('[parseRankingByHeader] Starting...')
+  console.log('[parseRankingByHeader] Starting... data length:', data.length)
+  
+  // 最初の10行をデバッグ出力
+  for (let i = 0; i < Math.min(10, data.length); i++) {
+    const row = data[i]
+    if (row) {
+      console.log(`[parseRankingByHeader] Row ${i}:`, row.slice(0, 6).map(c => String(c || '').substring(0, 15)))
+    }
+  }
   
   const allResults = []
   
@@ -495,12 +503,19 @@ const parseRankingByHeader = (data) => {
     const row = data[i]
     if (!row) continue
     
-    // 「氏名」を含む行をヘッダーとして検出
+    // 「氏名」を含む行をヘッダーとして検出（順位は任意）
     const hasName = row.some(cell => String(cell || '').includes('氏名'))
-    const hasRank = row.some(cell => String(cell || '').includes('順位'))
+    const hasTeamOrSales = row.some(cell => {
+      const s = String(cell || '')
+      return s.includes('所属') || s.includes('チーム') || s.includes('売上')
+    })
     
-    if (hasName && hasRank) {
-      console.log(`[parseRankingByHeader] Found header at row ${i}:`, row.slice(0, 6))
+    if (hasName) {
+      console.log(`[parseRankingByHeader] Row ${i} has 氏名, hasTeamOrSales=${hasTeamOrSales}`)
+    }
+    
+    if (hasName && hasTeamOrSales) {
+      console.log(`[parseRankingByHeader] Found header at row ${i}:`, row.slice(0, 8))
       
       // この行をヘッダーとしてデータをパース
       const headers = row
@@ -532,10 +547,17 @@ const parseRankingByHeader = (data) => {
         const name = colName !== -1 ? String(dataRow[colName] || '').trim() : ''
         if (!name) continue
         
-        // 順位が数字でなければスキップ（ヘッダーや空行を除外）
-        const rankValue = colRank !== -1 ? dataRow[colRank] : j - i
-        const rank = parseInt(rankValue) || 0
-        if (rank === 0) continue
+        // 名前が「氏名」や数字だけならスキップ（ヘッダー行の可能性）
+        if (name === '氏名' || name === '名前' || /^\d+$/.test(name)) continue
+        
+        // 順位を取得（なければ連番）
+        let rank = 0
+        if (colRank !== -1 && dataRow[colRank]) {
+          rank = parseInt(dataRow[colRank]) || 0
+        }
+        if (rank === 0) {
+          rank = allResults.length + 1
+        }
         
         const entry = {
           rank: rank,
@@ -546,6 +568,7 @@ const parseRankingByHeader = (data) => {
           profitRate: colProfitRate !== -1 ? parsePercent(dataRow[colProfitRate]) : 0
         }
         
+        console.log(`[parseRankingByHeader] Row ${j}: ${entry.name}, sales=${entry.sales}`)
         allResults.push(entry)
       }
     }

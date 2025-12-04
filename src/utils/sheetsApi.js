@@ -179,140 +179,132 @@ export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体'
 
 /**
  * シートをチーム別サマリーと部門別ランキングに分けてパース
+ * gviz APIでは【】セクションが取得できないため、ヘッダー行の内容で判断
  */
 const parseSheetWithDepartments = (data, sheetName) => {
-  console.log(`[parseSheetWithDepartments] Parsing ${sheetName}...`)
+  console.log(`[parseSheetWithDepartments] Parsing ${sheetName}... rows: ${data.length}`)
   
   const result = {
     teamSummary: [],
     departments: []
   }
   
-  let currentSection = null
-  let currentDeptName = null
+  // 最初の20行をデバッグ出力
+  for (let i = 0; i < Math.min(20, data.length); i++) {
+    const row = data[i]
+    if (row) {
+      console.log(`[parseSheetWithDepartments] Row ${i}:`, row.slice(0, 6).map(c => String(c || '').substring(0, 12)))
+    }
+  }
+  
+  let currentSection = null // 'teamSummary' or 'ranking'
+  let currentTeam = null
   let headerRow = null
-  let sectionData = []
+  let headerRowIndex = -1
+  const departmentMap = {} // チーム名 -> ランキングデータ
   
   for (let i = 0; i < data.length; i++) {
     const row = data[i]
     if (!row) continue
     
-    const firstCell = String(row[0] || '').trim()
+    // ヘッダー行を検出
+    const hasTeamHeader = row.some(cell => String(cell || '') === 'チーム')
+    const hasNameHeader = row.some(cell => String(cell || '') === '氏名')
+    const hasRankHeader = row.some(cell => String(cell || '').includes('順位'))
     
-    // 【】で囲まれたセクションタイトルを検出
-    if (firstCell.startsWith('【') && firstCell.includes('】')) {
-      // 前のセクションを処理
-      if (currentSection && headerRow && sectionData.length > 0) {
-        processSection(result, currentSection, currentDeptName, headerRow, sectionData, sheetName)
+    if (hasRankHeader && (hasTeamHeader || hasNameHeader)) {
+      // 新しいヘッダー行を発見
+      if (hasTeamHeader && !hasNameHeader) {
+        // チーム別サマリーのヘッダー
+        currentSection = 'teamSummary'
+        console.log(`[parseSheetWithDepartments] Found teamSummary header at row ${i}`)
+      } else if (hasNameHeader) {
+        // 個人ランキングのヘッダー
+        currentSection = 'ranking'
+        console.log(`[parseSheetWithDepartments] Found ranking header at row ${i}`)
+      }
+      headerRow = row
+      headerRowIndex = i
+      continue
+    }
+    
+    // データ行を処理
+    if (headerRow && i > headerRowIndex) {
+      const firstCell = row[0]
+      // 空行または合計行はスキップ
+      if (firstCell === null || firstCell === undefined || firstCell === '' || String(firstCell).includes('合計')) {
+        continue
       }
       
-      // 新しいセクションを開始
-      currentSection = firstCell
-      currentDeptName = extractDeptName(firstCell, sheetName)
-      headerRow = null
-      sectionData = []
-      console.log(`[parseSheetWithDepartments] Found section: ${firstCell} -> dept: ${currentDeptName}`)
-      continue
-    }
-    
-    // ヘッダー行を検出（「順位」または「チーム」を含む行）
-    const hasRankOrTeam = row.some(cell => {
-      const s = String(cell || '')
-      return s.includes('順位') || s.includes('チーム') || s.includes('氏名')
-    })
-    
-    if (hasRankOrTeam && !headerRow) {
-      headerRow = row
-      console.log(`[parseSheetWithDepartments] Header at row ${i}:`, row.slice(0, 6))
-      continue
-    }
-    
-    // データ行を収集
-    if (headerRow && row[0] !== null && row[0] !== undefined && row[0] !== '') {
-      // 「合計」行はスキップ
-      if (String(row[0]).includes('合計')) continue
-      sectionData.push(row)
+      // 次のヘッダー行に到達したらリセット
+      const isNextHeader = row.some(cell => String(cell || '') === 'チーム' || String(cell || '') === '氏名')
+      if (isNextHeader) {
+        headerRow = null
+        headerRowIndex = -1
+        i-- // この行を再処理
+        continue
+      }
+      
+      if (currentSection === 'teamSummary') {
+        // チーム別サマリーのデータ
+        const team = {
+          rank: parseInt(row[0]) || result.teamSummary.length + 1,
+          team: String(row[1] || '').trim(),
+          sales: parseAmount(row[2]),
+          expense: parseAmount(row[3]),
+          profit: parseAmount(row[4]),
+          profitRate: parsePercent(row[5]),
+          salesRatio: parsePercent(row[6]),
+          profitRatio: parsePercent(row[7])
+        }
+        if (team.team && team.team !== '-') {
+          result.teamSummary.push(team)
+          console.log(`[parseSheetWithDepartments] TeamSummary: ${team.team}, sales=${team.sales}`)
+        }
+      } else if (currentSection === 'ranking') {
+        // 個人ランキングのデータ
+        const person = {
+          rank: parseInt(row[0]) || 1,
+          name: String(row[1] || '').trim(),
+          team: String(row[2] || '').trim(),
+          sales: parseAmount(row[3]),
+          salesRatio: parsePercent(row[4]),
+          profit: parseAmount(row[5]),
+          profitRatio: parsePercent(row[6]),
+          profitRate: parsePercent(row[7])
+        }
+        
+        if (person.name && person.name !== '氏名') {
+          // チーム名でグループ化
+          const teamKey = person.team || 'その他'
+          if (!departmentMap[teamKey]) {
+            departmentMap[teamKey] = []
+          }
+          departmentMap[teamKey].push(person)
+          console.log(`[parseSheetWithDepartments] Ranking: ${person.name} (${teamKey}), sales=${person.sales}`)
+        }
+      }
     }
   }
   
-  // 最後のセクションを処理
-  if (currentSection && headerRow && sectionData.length > 0) {
-    processSection(result, currentSection, currentDeptName, headerRow, sectionData, sheetName)
+  // departmentMapをdepartments配列に変換
+  for (const [teamName, rankings] of Object.entries(departmentMap)) {
+    // 各部門内で順位を振り直す
+    rankings.forEach((person, idx) => {
+      person.rank = idx + 1
+    })
+    result.departments.push({
+      name: teamName,
+      rankings: rankings
+    })
   }
   
   console.log(`[parseSheetWithDepartments] ${sheetName} complete: ${result.teamSummary.length} teams, ${result.departments.length} departments`)
+  result.departments.forEach(dept => {
+    console.log(`[parseSheetWithDepartments] Department: ${dept.name} - ${dept.rankings.length} people`)
+  })
+  
   return result
-}
-
-/**
- * セクションタイトルから部門名を抽出
- */
-const extractDeptName = (sectionTitle, sheetName) => {
-  // 【東京チーム別サマリー】→ null (サマリー)
-  // 【東京マネジメント個人ランキング】→ マネジメント
-  // 【東京 制作1個人ランキング】→ 制作1
-  
-  if (sectionTitle.includes('サマリー')) {
-    return null // チーム別サマリー
-  }
-  
-  // 地域名を除去
-  const regions = ['東京', '大阪', '名古屋', '企画開発']
-  let title = sectionTitle.replace(/【|】/g, '')
-  for (const region of regions) {
-    title = title.replace(region, '')
-  }
-  
-  // 「個人ランキング」を除去
-  title = title.replace('個人ランキング', '').trim()
-  
-  return title || 'その他'
-}
-
-/**
- * セクションデータを処理してresultに追加
- */
-const processSection = (result, sectionTitle, deptName, headerRow, dataRows, sheetName) => {
-  console.log(`[processSection] Processing: ${sectionTitle}, deptName: ${deptName}, rows: ${dataRows.length}`)
-  
-  if (sectionTitle.includes('サマリー')) {
-    // チーム別サマリー
-    // 構造: 順位、チーム、売上高、支払高、粗利益、粗利益率、支社内売上比率、支社内粗利比率
-    const teamData = dataRows.map((row, idx) => ({
-      rank: parseInt(row[0]) || idx + 1,
-      team: String(row[1] || '').trim(),
-      sales: parseAmount(row[2]),
-      expense: parseAmount(row[3]),
-      profit: parseAmount(row[4]),
-      profitRate: parsePercent(row[5]),
-      salesRatio: parsePercent(row[6]),
-      profitRatio: parsePercent(row[7])
-    })).filter(item => item.team && item.team !== '-')
-    
-    result.teamSummary = teamData
-    console.log(`[processSection] TeamSummary: ${teamData.length} teams`)
-  } else {
-    // 部門別個人ランキング
-    // 構造: 順位、氏名、所属チーム、売上額、部内売上比率、粗利額、部内粗利比率、粗利益率
-    const rankings = dataRows.map((row, idx) => ({
-      rank: parseInt(row[0]) || idx + 1,
-      name: String(row[1] || '').trim(),
-      team: String(row[2] || '').trim(),
-      sales: parseAmount(row[3]),
-      salesRatio: parsePercent(row[4]),
-      profit: parseAmount(row[5]),
-      profitRatio: parsePercent(row[6]),
-      profitRate: parsePercent(row[7])
-    })).filter(item => item.name && item.name !== '氏名')
-    
-    if (rankings.length > 0) {
-      result.departments.push({
-        name: deptName,
-        rankings: rankings
-      })
-      console.log(`[processSection] Department ${deptName}: ${rankings.length} people`)
-    }
-  }
 }
 
 /**

@@ -6,7 +6,7 @@ import './DataUpload.css'
 const DataUpload = ({ onUpload }) => {
   const navigate = useNavigate()
 
-  // 売上データ - デフォルトURLを新しいものに変更
+  // 売上データ
   const [salesUrl, setSalesUrl] = useState('https://docs.google.com/spreadsheets/d/1ySCbLFCgnnLgEQUszfBc5BubkXwH3P4kDbLJnibgn1M/edit?usp=sharing')
 
   // 評価マスター
@@ -27,22 +27,40 @@ const DataUpload = ({ onUpload }) => {
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-  const [debugSalesData, setDebugSalesData] = useState('')
 
-  const checkSalesStorage = () => {
-    const data = localStorage.getItem('salesRanking')
-    if (data) {
-      const parsed = JSON.parse(data)
-      const info = {
-        overallCount: parsed.overall?.length || 0,
-        tokyoCount: parsed.tokyo?.length || 0,
-        osakaCount: parsed.osaka?.length || 0,
-        nagoyaCount: parsed.nagoya?.length || 0,
-        kikakukaihatsuCount: parsed.kikakukaihatsu?.length || 0
+  // localStorage からデータ件数を取得する関数
+  const getSalesCount = () => {
+    try {
+      const data = localStorage.getItem('salesRanking')
+      if (data) {
+        const parsed = JSON.parse(data)
+        return (parsed.overall?.length || 0) +
+          (parsed.tokyo?.length || 0) +
+          (parsed.osaka?.length || 0) +
+          (parsed.nagoya?.length || 0) +
+          (parsed.kikakukaihatsu?.length || 0)
       }
-      setDebugSalesData(JSON.stringify(info, null, 2))
-    } else {
-      setDebugSalesData('データなし')
+    } catch (e) {
+      console.error('Error reading sales data:', e)
+    }
+    return 0
+  }
+
+  const getMasterCount = () => {
+    try {
+      const data = localStorage.getItem('evaluationMaster')
+      return data ? JSON.parse(data).length : 0
+    } catch (e) {
+      return 0
+    }
+  }
+
+  const getEvaluationCount = () => {
+    try {
+      const data = localStorage.getItem('evaluationData')
+      return data ? Object.keys(JSON.parse(data)).length : 0
+    } catch (e) {
+      return 0
     }
   }
 
@@ -51,13 +69,10 @@ const DataUpload = ({ onUpload }) => {
     setMessage('')
 
     try {
+      console.log('[DataUpload] Starting sales upload...')
       const salesData = await fetchAllSalesSheets(salesUrl)
 
-      if (salesData.errors && salesData.errors.length > 0) {
-        console.warn('Some sheets failed to load:', salesData.errors)
-      }
-
-      console.log('DataUpload: salesData before onUpload:', salesData)
+      console.log('[DataUpload] salesData received:', salesData)
       onUpload('salesRanking', salesData)
 
       const totalRecords = (salesData.overall?.length || 0) +
@@ -66,10 +81,16 @@ const DataUpload = ({ onUpload }) => {
         (salesData.nagoya?.length || 0) +
         (salesData.kikakukaihatsu?.length || 0)
 
-      console.log('DataUpload: totalRecords calculated:', totalRecords)
-      setMessage(`売上ランキングデータを読み込みました（全${totalRecords}件）`)
+      console.log('[DataUpload] totalRecords:', totalRecords)
+      
+      if (totalRecords > 0) {
+        setMessage(`✅ 売上ランキングデータを読み込みました（全${totalRecords}件）`)
+      } else {
+        setMessage('⚠️ データが見つかりませんでした。スプレッドシートの形式を確認してください。')
+      }
     } catch (error) {
-      setMessage(`エラー: ${error.message}`)
+      console.error('[DataUpload] Error:', error)
+      setMessage(`❌ エラー: ${error.message}`)
     } finally {
       setLoading(false)
     }
@@ -78,7 +99,7 @@ const DataUpload = ({ onUpload }) => {
   const handleUploadEvaluation = async () => {
     if (!masterUrl || !masterSheetName || !selfEvalUrl || !selfEvalSheetName ||
       !managerEvalUrl || !managerEvalSheetName || !totalScoreUrl || !totalScoreSheetName) {
-      setMessage('すべての評価データのURLとシート名を入力してください')
+      setMessage('⚠️ すべての評価データのURLとシート名を入力してください')
       return
     }
 
@@ -86,7 +107,6 @@ const DataUpload = ({ onUpload }) => {
     setMessage('')
 
     try {
-      // 4つのシートを並行して読み込み
       const [masterRaw, selfRaw, managerRaw, scoreRaw] = await Promise.all([
         fetchSheetData(masterUrl, masterSheetName),
         fetchSheetData(selfEvalUrl, selfEvalSheetName),
@@ -94,22 +114,19 @@ const DataUpload = ({ onUpload }) => {
         fetchSheetData(totalScoreUrl, totalScoreSheetName)
       ])
 
-      // データを構造化
       const masterData = convertToStructuredData(masterRaw, 'evaluationMaster')
       const selfData = convertToStructuredData(selfRaw, 'selfEvaluation')
       const managerData = convertToStructuredData(managerRaw, 'managerEvaluation')
       const scoreData = convertToStructuredData(scoreRaw, 'totalScore')
 
-      // データをマージ
       const mergedData = mergeEvaluationData(masterData, selfData, managerData, scoreData)
 
-      // 評価マスターと統合データを個別に保存
       onUpload('evaluationMaster', masterData)
       onUpload('evaluationData', mergedData)
 
-      setMessage('評価データを読み込みました（4シート統合完了）')
+      setMessage('✅ 評価データを読み込みました（4シート統合完了）')
     } catch (error) {
-      setMessage(`エラー: ${error.message}`)
+      setMessage(`❌ エラー: ${error.message}`)
       console.error('Evaluation upload error:', error)
     } finally {
       setLoading(false)
@@ -120,13 +137,12 @@ const DataUpload = ({ onUpload }) => {
     <div className="data-upload-container">
       <h2>データアップロード</h2>
       <p className="upload-description">
-        Google スプレッドシートのURLとシート名を入力してデータを読み込みます。
-        <br />
+        Google スプレッドシートのURLとシート名を入力してデータを読み込みます。<br />
         ※スプレッドシートは「リンクを知っている全員が閲覧可能」に設定してください。
       </p>
 
       {message && (
-        <div className={`message ${message.includes('エラー') ? 'error' : 'success'}`}>
+        <div className={`message ${message.includes('エラー') || message.includes('❌') ? 'error' : message.includes('⚠️') ? 'warning' : 'success'}`}>
           {message}
         </div>
       )}
@@ -136,40 +152,18 @@ const DataUpload = ({ onUpload }) => {
         <h3>📊 現在読み込まれているデータ</h3>
         <div className="data-viewer-grid">
           <div className="data-viewer-card">
-            <span className="data-label">売上ランキングデータ</span>
-            <span className="data-count">
-              {(() => {
-                const data = localStorage.getItem('salesRanking')
-                if (data) {
-                  const parsed = JSON.parse(data)
-                  const total = (parsed.overall?.length || 0) +
-                    (parsed.tokyo?.length || 0) +
-                    (parsed.osaka?.length || 0) +
-                    (parsed.nagoya?.length || 0) +
-                    (parsed.kikakukaihatsu?.length || 0)
-                  return `${total} 件 (5シート)`
-                }
-                return '0 件'
-              })()}
-            </span>
+            <span className="data-label">売上ランキング</span>
+            <span className="data-count">{getSalesCount()} 件</span>
+            <span className="data-sub">5シート統合</span>
           </div>
           <div className="data-viewer-card">
             <span className="data-label">評価マスター</span>
-            <span className="data-count">
-              {(() => {
-                const data = localStorage.getItem('evaluationMaster')
-                return data ? `${JSON.parse(data).length} 件` : '0 件'
-              })()}
-            </span>
+            <span className="data-count">{getMasterCount()} 件</span>
           </div>
           <div className="data-viewer-card">
-            <span className="data-label">評価データ（4シート統合）</span>
-            <span className="data-count">
-              {(() => {
-                const data = localStorage.getItem('evaluationData')
-                return data ? `${Object.keys(JSON.parse(data)).length} 件` : '0 件'
-              })()}
-            </span>
+            <span className="data-label">評価データ</span>
+            <span className="data-count">{getEvaluationCount()} 件</span>
+            <span className="data-sub">4シート統合</span>
           </div>
         </div>
         <div className="data-viewer-actions">
@@ -189,7 +183,7 @@ const DataUpload = ({ onUpload }) => {
           全体・東京・大阪・名古屋・企画開発の5シートからデータを読み込みます
         </p>
         <div className="input-group">
-          <label>スプレッドシートURL:</label>
+          <label>スプレッドシートURL</label>
           <input
             type="text"
             value={salesUrl}
@@ -213,72 +207,88 @@ const DataUpload = ({ onUpload }) => {
           評価マスター・自己評価・部長評価・合計評点の4シートからデータを読み込みます
         </p>
 
-        <div className="input-group">
-          <label>評価マスター URL:</label>
-          <input
-            type="text"
-            value={masterUrl}
-            onChange={(e) => setMasterUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-          />
-          <label>シート名:</label>
-          <input
-            type="text"
-            value={masterSheetName}
-            onChange={(e) => setMasterSheetName(e.target.value)}
-            placeholder="シート1"
-          />
+        <div className="input-row">
+          <div className="input-group">
+            <label>評価マスター URL</label>
+            <input
+              type="text"
+              value={masterUrl}
+              onChange={(e) => setMasterUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+            />
+          </div>
+          <div className="input-group small">
+            <label>シート名</label>
+            <input
+              type="text"
+              value={masterSheetName}
+              onChange={(e) => setMasterSheetName(e.target.value)}
+              placeholder="シート1"
+            />
+          </div>
         </div>
 
-        <div className="input-group">
-          <label>自己評価フォーム URL:</label>
-          <input
-            type="text"
-            value={selfEvalUrl}
-            onChange={(e) => setSelfEvalUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-          />
-          <label>シート名:</label>
-          <input
-            type="text"
-            value={selfEvalSheetName}
-            onChange={(e) => setSelfEvalSheetName(e.target.value)}
-            placeholder="フォームの回答1"
-          />
+        <div className="input-row">
+          <div className="input-group">
+            <label>自己評価フォーム URL</label>
+            <input
+              type="text"
+              value={selfEvalUrl}
+              onChange={(e) => setSelfEvalUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+            />
+          </div>
+          <div className="input-group small">
+            <label>シート名</label>
+            <input
+              type="text"
+              value={selfEvalSheetName}
+              onChange={(e) => setSelfEvalSheetName(e.target.value)}
+              placeholder="フォームの回答1"
+            />
+          </div>
         </div>
 
-        <div className="input-group">
-          <label>部長評価フォーム URL:</label>
-          <input
-            type="text"
-            value={managerEvalUrl}
-            onChange={(e) => setManagerEvalUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-          />
-          <label>シート名:</label>
-          <input
-            type="text"
-            value={managerEvalSheetName}
-            onChange={(e) => setManagerEvalSheetName(e.target.value)}
-            placeholder="フォームの回答_部長"
-          />
+        <div className="input-row">
+          <div className="input-group">
+            <label>部長評価フォーム URL</label>
+            <input
+              type="text"
+              value={managerEvalUrl}
+              onChange={(e) => setManagerEvalUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+            />
+          </div>
+          <div className="input-group small">
+            <label>シート名</label>
+            <input
+              type="text"
+              value={managerEvalSheetName}
+              onChange={(e) => setManagerEvalSheetName(e.target.value)}
+              placeholder="フォームの回答_部長"
+            />
+          </div>
         </div>
 
-        <div className="input-group">
-          <label>合計評点 URL:</label>
-          <input
-            type="text"
-            value={totalScoreUrl}
-            onChange={(e) => setTotalScoreUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-          />
-          <label>シート名:</label>
-          <input
-            type="text"
-            value={totalScoreSheetName}
-            onChange={(e) => setTotalScoreSheetName(e.target.value)}
-            placeholder="計算_部長"
-          />
+        <div className="input-row">
+          <div className="input-group">
+            <label>合計評点 URL</label>
+            <input
+              type="text"
+              value={totalScoreUrl}
+              onChange={(e) => setTotalScoreUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+            />
+          </div>
+          <div className="input-group small">
+            <label>シート名</label>
+            <input
+              type="text"
+              value={totalScoreSheetName}
+              onChange={(e) => setTotalScoreSheetName(e.target.value)}
+              placeholder="計算_部長"
+            />
+          </div>
         </div>
 
         <button

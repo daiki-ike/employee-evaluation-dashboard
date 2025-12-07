@@ -227,22 +227,62 @@ const parseSheetWithDepartments = (data, sheetName) => {
 
   /**
    * セクションタイトル行かどうかを判定（【】で囲まれた行）
+   * 行内のすべてのセルをチェックし、【】を含むセルを探す
    */
   const isSectionTitleRow = (row) => {
     if (!row) return false
-    const firstCell = String(row[0] || '').trim()
-    return firstCell.startsWith('【') && firstCell.includes('】')
+    // 行内のすべてのセルをチェック
+    for (const cell of row) {
+      const cellStr = String(cell || '').trim()
+      if (cellStr.startsWith('【') && cellStr.includes('】')) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * 行からセクションタイトルを抽出
+   */
+  const getSectionTitle = (row) => {
+    if (!row) return null
+    for (const cell of row) {
+      const cellStr = String(cell || '').trim()
+      if (cellStr.startsWith('【') && cellStr.includes('】')) {
+        return cellStr
+      }
+    }
+    return null
   }
 
   /**
    * セクションタイトルから部門名を抽出
+   * 例: 【東京マネジメント個人ランキング】-> マネジメント
+   *     【東京 制作1個人ランキング】-> 制作1
+   *     【大阪営業個人ランキング】-> 営業
    */
   const extractDepartmentFromTitle = (title) => {
-    // 【東京マネジメント個人ランキング】-> マネジメント
-    // 【東京 制作1個人ランキング】-> 制作1
-    const match = title.match(/【.*?[\s　]?([^\s　【】]+?)個人ランキング】/)
-    if (match) return match[1]
-    return null
+    // 地域名のパターン（これらを除外して部門名を抽出）
+    const regions = ['東京', '大阪', '名古屋', '企画開発']
+
+    // 【...個人ランキング】のパターンにマッチ
+    const match = title.match(/【(.+?)個人ランキング】/)
+    if (!match) return null
+
+    let content = match[1].trim()
+
+    // 地域名を先頭から除外
+    for (const region of regions) {
+      if (content.startsWith(region)) {
+        content = content.substring(region.length)
+        break
+      }
+    }
+
+    // 先頭のスペース（半角・全角）を削除
+    content = content.replace(/^[\s　]+/, '').trim()
+
+    return content || null
   }
 
   for (let i = 0; i < data.length; i++) {
@@ -256,7 +296,7 @@ const parseSheetWithDepartments = (data, sheetName) => {
 
     // セクションタイトル行の処理（【】形式）
     if (isSectionTitleRow(row)) {
-      const title = String(row[0] || '')
+      const title = getSectionTitle(row)
       console.log(`[parseSheetWithDepartments] Found section title: ${title}`)
 
       // 個人ランキングセクションの場合、部門名を抽出
@@ -285,6 +325,8 @@ const parseSheetWithDepartments = (data, sheetName) => {
       } else if (hasNameHeader) {
         // 個人ランキングのヘッダー（「氏名」がある）
         currentSection = 'ranking'
+        // 注: セクションタイトル【】がない場合、currentDepartmentNameはnullのまま
+        // その場合は各データ行の所属チーム列（belongTeam）を使用する
         console.log(`[parseSheetWithDepartments] Found ranking header at row ${i}: ${rowStr.substring(0, 80)}`)
       }
       headerRow = row

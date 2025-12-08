@@ -258,22 +258,30 @@ const parseSheetWithDepartments = (data, sheetName) => {
   /**
    * セクションタイトルから部門名を抽出
    * 例: 【東京マネジメント個人ランキング】-> マネジメント
-   *     【東京 制作1個人ランキング】-> 制作1
-   *     【大阪営業個人ランキング】-> 営業
+   *     【東京制作1個人ランキング】-> 制作1
+   *     【名古屋個人ランキング】-> 名古屋（部門なしの場合は地域名を返す）
+   *     【東京営業所個人ランキング】-> 東京営業所（企画開発シートでは地域名を除外しない）
    */
   const extractDepartmentFromTitle = (title) => {
-    // 地域名のパターン（これらを除外して部門名を抽出）
-    const regions = ['東京', '大阪', '名古屋', '企画開発']
-
     // 【...個人ランキング】のパターンにマッチ
     const match = title.match(/【(.+?)個人ランキング】/)
     if (!match) return null
 
     let content = match[1].trim()
 
+    // 企画開発シートの場合は地域名を除外しない（東京営業所、沖縄営業所をそのまま使う）
+    if (sheetName === '企画開発') {
+      return content
+    }
+
+    // 地域名のパターン（これらを除外して部門名を抽出）
+    const regions = ['東京', '大阪', '名古屋', '企画開発']
+    let usedRegion = null
+
     // 地域名を先頭から除外
     for (const region of regions) {
       if (content.startsWith(region)) {
+        usedRegion = region
         content = content.substring(region.length)
         break
       }
@@ -281,6 +289,11 @@ const parseSheetWithDepartments = (data, sheetName) => {
 
     // 先頭のスペース（半角・全角）を削除
     content = content.replace(/^[\s　]+/, '').trim()
+
+    // 部門名が空の場合は地域名を返す（名古屋対応）
+    if (!content && usedRegion) {
+      return usedRegion
+    }
 
     return content || null
   }

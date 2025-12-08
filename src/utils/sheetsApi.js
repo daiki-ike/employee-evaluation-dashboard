@@ -215,6 +215,7 @@ const parseSheetWithDepartments = (data, sheetName) => {
   let headerRow = null
   let headerRowIndex = -1
   let currentDepartmentName = null
+  let columnMap = {} // ヘッダー列名 -> インデックスのマッピング
   const departmentMap = {} // チーム名 -> ランキングデータ
 
   /**
@@ -227,22 +228,75 @@ const parseSheetWithDepartments = (data, sheetName) => {
 
   /**
    * セクションタイトル行かどうかを判定（【】で囲まれた行）
+   * 行内のすべてのセルをチェックし、【】を含むセルを探す
    */
   const isSectionTitleRow = (row) => {
     if (!row) return false
-    const firstCell = String(row[0] || '').trim()
-    return firstCell.startsWith('【') && firstCell.includes('】')
+    // 行内のすべてのセルをチェック
+    for (const cell of row) {
+      const cellStr = String(cell || '').trim()
+      if (cellStr.startsWith('【') && cellStr.includes('】')) {
+        return true
+      }
+    }
+    return false
+  }
+
+  /**
+   * 行からセクションタイトルを抽出
+   */
+  const getSectionTitle = (row) => {
+    if (!row) return null
+    for (const cell of row) {
+      const cellStr = String(cell || '').trim()
+      if (cellStr.startsWith('【') && cellStr.includes('】')) {
+        return cellStr
+      }
+    }
+    return null
   }
 
   /**
    * セクションタイトルから部門名を抽出
+   * 例: 【東京マネジメント個人ランキング】-> マネジメント
+   *     【東京制作1個人ランキング】-> 制作1
+   *     【名古屋個人ランキング】-> 名古屋（部門なしの場合は地域名を返す）
+   *     【東京営業所個人ランキング】-> 東京営業所（企画開発シートでは地域名を除外しない）
    */
   const extractDepartmentFromTitle = (title) => {
-    // 【東京マネジメント個人ランキング】-> マネジメント
-    // 【東京 制作1個人ランキング】-> 制作1
-    const match = title.match(/【.*?[\s　]?([^\s　【】]+?)個人ランキング】/)
-    if (match) return match[1]
-    return null
+    // 【...個人ランキング】のパターンにマッチ
+    const match = title.match(/【(.+?)個人ランキング】/)
+    if (!match) return null
+
+    let content = match[1].trim()
+
+    // 企画開発シートの場合は地域名を除外しない（東京営業所、沖縄営業所をそのまま使う）
+    if (sheetName === '企画開発') {
+      return content
+    }
+
+    // 地域名のパターン（これらを除外して部門名を抽出）
+    const regions = ['東京', '大阪', '名古屋', '企画開発']
+    let usedRegion = null
+
+    // 地域名を先頭から除外
+    for (const region of regions) {
+      if (content.startsWith(region)) {
+        usedRegion = region
+        content = content.substring(region.length)
+        break
+      }
+    }
+
+    // 先頭のスペース（半角・全角）を削除
+    content = content.replace(/^[\s　]+/, '').trim()
+
+    // 部門名が空の場合は地域名を返す（名古屋対応）
+    if (!content && usedRegion) {
+      return usedRegion
+    }
+
+    return content || null
   }
 
   for (let i = 0; i < data.length; i++) {
@@ -256,7 +310,7 @@ const parseSheetWithDepartments = (data, sheetName) => {
 
     // セクションタイトル行の処理（【】形式）
     if (isSectionTitleRow(row)) {
-      const title = String(row[0] || '')
+      const title = getSectionTitle(row)
       console.log(`[parseSheetWithDepartments] Found section title: ${title}`)
 
       // 個人ランキングセクションの場合、部門名を抽出
@@ -285,7 +339,24 @@ const parseSheetWithDepartments = (data, sheetName) => {
       } else if (hasNameHeader) {
         // 個人ランキングのヘッダー（「氏名」がある）
         currentSection = 'ranking'
+        // 注: セクションタイトル【】がない場合、currentDepartmentNameはnullのまま
+        // その場合は各データ行の所属チーム列（belongTeam）を使用する
+
+        // ヘッダー行から列インデックスを動的に取得（所属チーム列がないシート対応）
+        columnMap = {}
+        row.forEach((cell, idx) => {
+          const cellStr = String(cell || '').trim()
+          if (cellStr.includes('順位')) columnMap.rank = idx
+          if (cellStr === '氏名') columnMap.name = idx
+          if (cellStr.includes('所属') || cellStr === '所属チーム') columnMap.team = idx
+          if (cellStr === '売上額' || cellStr.includes('売上額')) columnMap.sales = idx
+          if (cellStr.includes('部内売上比率')) columnMap.salesRatio = idx
+          if (cellStr === '粗利額' || cellStr.includes('粗利額')) columnMap.profit = idx
+          if (cellStr.includes('部内粗利比率')) columnMap.profitRatio = idx
+          if (cellStr === '粗利益率' || cellStr.includes('粗利益率')) columnMap.profitRate = idx
+        })
         console.log(`[parseSheetWithDepartments] Found ranking header at row ${i}: ${rowStr.substring(0, 80)}`)
+        console.log(`[parseSheetWithDepartments] Column mapping:`, JSON.stringify(columnMap))
       }
       headerRow = row
       headerRowIndex = i
@@ -336,17 +407,17 @@ const parseSheetWithDepartments = (data, sheetName) => {
           console.log(`[parseSheetWithDepartments] TeamSummary: rank=${team.rank}, team=${team.team}, sales=${team.sales}`)
         }
       } else if (currentSection === 'ranking') {
-        // 個人ランキングのデータ
-        const belongTeam = String(row[2] || '').trim()
+        // 個人ランキングのデータ（動的列マッピングを使用）
+        const belongTeam = columnMap.team !== undefined ? String(row[columnMap.team] || '').trim() : ''
         const person = {
           rank: rankValue || 1,
-          name: String(row[1] || '').trim(),
+          name: columnMap.name !== undefined ? String(row[columnMap.name] || '').trim() : String(row[1] || '').trim(),
           team: belongTeam,
-          sales: parseAmount(row[3]),
-          salesRatio: parsePercent(row[4]),
-          profit: parseAmount(row[5]),
-          profitRatio: parsePercent(row[6]),
-          profitRate: parsePercent(row[7])
+          sales: columnMap.sales !== undefined ? parseAmount(row[columnMap.sales]) : 0,
+          salesRatio: columnMap.salesRatio !== undefined ? parsePercent(row[columnMap.salesRatio]) : 0,
+          profit: columnMap.profit !== undefined ? parseAmount(row[columnMap.profit]) : 0,
+          profitRatio: columnMap.profitRatio !== undefined ? parsePercent(row[columnMap.profitRatio]) : 0,
+          profitRate: columnMap.profitRate !== undefined ? parsePercent(row[columnMap.profitRate]) : 0
         }
 
         if (person.name && person.name !== '氏名' && person.name !== '-') {

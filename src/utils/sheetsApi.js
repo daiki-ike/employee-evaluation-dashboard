@@ -215,6 +215,7 @@ const parseSheetWithDepartments = (data, sheetName) => {
   let headerRow = null
   let headerRowIndex = -1
   let currentDepartmentName = null
+  let columnMap = {} // ヘッダー列名 -> インデックスのマッピング
   const departmentMap = {} // チーム名 -> ランキングデータ
 
   /**
@@ -340,7 +341,22 @@ const parseSheetWithDepartments = (data, sheetName) => {
         currentSection = 'ranking'
         // 注: セクションタイトル【】がない場合、currentDepartmentNameはnullのまま
         // その場合は各データ行の所属チーム列（belongTeam）を使用する
+
+        // ヘッダー行から列インデックスを動的に取得（所属チーム列がないシート対応）
+        columnMap = {}
+        row.forEach((cell, idx) => {
+          const cellStr = String(cell || '').trim()
+          if (cellStr.includes('順位')) columnMap.rank = idx
+          if (cellStr === '氏名') columnMap.name = idx
+          if (cellStr.includes('所属') || cellStr === '所属チーム') columnMap.team = idx
+          if (cellStr === '売上額' || cellStr.includes('売上額')) columnMap.sales = idx
+          if (cellStr.includes('部内売上比率')) columnMap.salesRatio = idx
+          if (cellStr === '粗利額' || cellStr.includes('粗利額')) columnMap.profit = idx
+          if (cellStr.includes('部内粗利比率')) columnMap.profitRatio = idx
+          if (cellStr === '粗利益率' || cellStr.includes('粗利益率')) columnMap.profitRate = idx
+        })
         console.log(`[parseSheetWithDepartments] Found ranking header at row ${i}: ${rowStr.substring(0, 80)}`)
+        console.log(`[parseSheetWithDepartments] Column mapping:`, JSON.stringify(columnMap))
       }
       headerRow = row
       headerRowIndex = i
@@ -391,17 +407,17 @@ const parseSheetWithDepartments = (data, sheetName) => {
           console.log(`[parseSheetWithDepartments] TeamSummary: rank=${team.rank}, team=${team.team}, sales=${team.sales}`)
         }
       } else if (currentSection === 'ranking') {
-        // 個人ランキングのデータ
-        const belongTeam = String(row[2] || '').trim()
+        // 個人ランキングのデータ（動的列マッピングを使用）
+        const belongTeam = columnMap.team !== undefined ? String(row[columnMap.team] || '').trim() : ''
         const person = {
           rank: rankValue || 1,
-          name: String(row[1] || '').trim(),
+          name: columnMap.name !== undefined ? String(row[columnMap.name] || '').trim() : String(row[1] || '').trim(),
           team: belongTeam,
-          sales: parseAmount(row[3]),
-          salesRatio: parsePercent(row[4]),
-          profit: parseAmount(row[5]),
-          profitRatio: parsePercent(row[6]),
-          profitRate: parsePercent(row[7])
+          sales: columnMap.sales !== undefined ? parseAmount(row[columnMap.sales]) : 0,
+          salesRatio: columnMap.salesRatio !== undefined ? parsePercent(row[columnMap.salesRatio]) : 0,
+          profit: columnMap.profit !== undefined ? parseAmount(row[columnMap.profit]) : 0,
+          profitRatio: columnMap.profitRatio !== undefined ? parsePercent(row[columnMap.profitRatio]) : 0,
+          profitRate: columnMap.profitRate !== undefined ? parsePercent(row[columnMap.profitRate]) : 0
         }
 
         if (person.name && person.name !== '氏名' && person.name !== '-') {

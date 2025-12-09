@@ -1,4 +1,4 @@
-// sheetsApi.js - Google Sheets API utilities
+// sheetsApi.js - Evaluation Sheet API utilities (評価シート専用)
 
 /**
  * Google Sheets の公開URLからスプレッドシートIDを抽出
@@ -19,40 +19,40 @@ export const fetchSheetData = async (spreadsheetUrl, sheetName) => {
 
   const encodedSheetName = encodeURIComponent(sheetName)
   const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:json&sheet=${encodedSheetName}`
-  
+
   console.log('[fetchSheetData] Fetching:', sheetName)
   console.log('[fetchSheetData] URL:', url)
 
   const response = await fetch(url)
   const text = await response.text()
-  
+
   console.log('[fetchSheetData] Response length:', text.length, 'chars')
-  
+
   // Google Visualization API のレスポンスをパース
   const jsonMatch = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\);?$/)
   if (!jsonMatch) {
     throw new Error('Failed to parse Google Sheets response')
   }
-  
+
   const json = JSON.parse(jsonMatch[1])
-  
+
   if (json.status === 'error') {
     throw new Error(json.errors?.[0]?.detailed_message || 'Unknown error')
   }
-  
+
   const table = json.table
   console.log('[fetchSheetData] Columns:', table.cols?.length)
   console.log('[fetchSheetData] Total rows from API:', table.rows?.length)
-  
+
   // データを2次元配列に変換
-  const data = table.rows.map(row => 
+  const data = table.rows.map(row =>
     row.c.map(cell => {
       if (!cell) return null
       // フォーマット済みの値があればそれを使用、なければ生の値
       return cell.f !== undefined ? cell.f : cell.v
     })
   )
-  
+
   if (data.length > 0) {
     console.log('[fetchSheetData] First row raw:', JSON.stringify(table.rows[0].c.slice(0, 8)))
   }
@@ -60,28 +60,8 @@ export const fetchSheetData = async (spreadsheetUrl, sheetName) => {
   if (data.length > 0) {
     console.log('[fetchSheetData] First row converted:', data[0])
   }
-  
+
   return data
-}
-
-/**
- * 金額文字列をパース（¥1,234,567 → 1234567）
- */
-const parseAmount = (value) => {
-  if (value === null || value === undefined) return 0
-  if (typeof value === 'number') return value
-  const str = String(value).replace(/[¥￥,\s]/g, '')
-  return parseInt(str) || 0
-}
-
-/**
- * パーセント文字列をパース（12.34% → 12.34）
- */
-const parsePercent = (value) => {
-  if (value === null || value === undefined) return 0
-  if (typeof value === 'number') return value * 100
-  const str = String(value).replace(/[%\s]/g, '')
-  return parseFloat(str) || 0
 }
 
 /**
@@ -89,7 +69,7 @@ const parsePercent = (value) => {
  */
 export const fetchMasterData = async (spreadsheetUrl, sheetName) => {
   const data = await fetchSheetData(spreadsheetUrl, sheetName)
-  
+
   // ヘッダー行をスキップしてデータを返す
   return data.slice(1).map(row => ({
     id: row[0],
@@ -105,7 +85,7 @@ export const fetchMasterData = async (spreadsheetUrl, sheetName) => {
  */
 export const fetchEvaluationData = async (spreadsheetUrl, sheetName, type = 'raw') => {
   const rawData = await fetchSheetData(spreadsheetUrl, sheetName)
-  
+
   if (type === 'raw') {
     return rawData
   } else if (type === 'totalScore') {
@@ -116,613 +96,6 @@ export const fetchEvaluationData = async (spreadsheetUrl, sheetName, type = 'raw
   }
 
   return rawData
-}
-
-/**
- * 全シートから売上データを取得
- * DataUpload.jsxから呼び出される
- */
-export const fetchAllSalesSheets = async (spreadsheetUrl, sheetNames = ['全体', '東京', '大阪', '名古屋', '企画開発']) => {
-  console.log('[fetchAllSalesSheets] Starting...')
-  
-  const result = {
-    overall: [],
-    tokyo: { teamSummary: [], departments: [] },
-    osaka: { teamSummary: [], departments: [] },
-    nagoya: { teamSummary: [], departments: [] },
-    kikakukaihatsu: { teamSummary: [], departments: [] }
-  }
-
-  const sheetMapping = {
-    '全体': 'overall',
-    '東京': 'tokyo',
-    '大阪': 'osaka',
-    '名古屋': 'nagoya',
-    '企画開発': 'kikakukaihatsu'
-  }
-
-  for (const sheetName of sheetNames) {
-    try {
-      console.log(`[fetchAllSalesSheets] Fetching sheet: ${sheetName}`)
-      const data = await fetchSheetData(spreadsheetUrl, sheetName)
-      
-      console.log(`[fetchAllSalesSheets] ${sheetName} length:`, data.length)
-      
-      const key = sheetMapping[sheetName] || sheetName.toLowerCase()
-      
-      if (sheetName === '全体') {
-        // 全体シートは従来通りのパース
-        const rankings = parseRankingByHeader(data)
-        result.overall = rankings
-        console.log(`[fetchAllSalesSheets] 全体: ${rankings.length} total records`)
-      } else {
-        // 他のシートはチーム別サマリー + 部門別ランキング
-        const parsed = parseSheetWithDepartments(data, sheetName)
-        result[key] = parsed
-        console.log(`[fetchAllSalesSheets] ${sheetName}: teamSummary=${parsed.teamSummary.length}, departments=${parsed.departments.length}`)
-      }
-    } catch (error) {
-      console.error(`[fetchAllSalesSheets] Error fetching ${sheetName}:`, error)
-    }
-  }
-
-  console.log('[fetchAllSalesSheets] Complete')
-  console.log('[fetchAllSalesSheets] Result summary:', {
-    overall: result.overall.length,
-    tokyo: `${result.tokyo.teamSummary.length} teams, ${result.tokyo.departments.length} depts`,
-    osaka: `${result.osaka.teamSummary.length} teams, ${result.osaka.departments.length} depts`,
-    nagoya: `${result.nagoya.teamSummary.length} teams, ${result.nagoya.departments.length} depts`,
-    kikakukaihatsu: `${result.kikakukaihatsu.teamSummary.length} teams, ${result.kikakukaihatsu.departments.length} depts`
-  })
-  return result
-}
-
-/**
- * シートをチーム別サマリーと部門別ランキングに分けてパース
- * gviz APIでは【】セクションが取得できないため、ヘッダー行の内容で判断
- *
- * スプレッドシート構造:
- * 【東京チーム別サマリー】
- * 順位 | チーム | 売上高 | 支払高 | 粗利益 | 粗利益率 | 売上比率 | 粗利比率
- * 1    | マネジメント | ¥61,197,837 | ...
- *
- * 【東京マネジメント個人ランキング】
- * 順位 | 氏名 | 所属チーム | 売上額 | 部内売上比率 | 粗利額 | 部内粗利比率 | 粗利益率
- * 1    | 竹中 孝明 | マネジメント | ¥34,432,740 | 56.30% | ...
- */
-const parseSheetWithDepartments = (data, sheetName) => {
-  console.log(`[parseSheetWithDepartments] Parsing ${sheetName}... rows: ${data.length}`)
-
-  const result = {
-    teamSummary: [],
-    departments: []
-  }
-
-  // 最初の30行をデバッグ出力
-  console.log(`[parseSheetWithDepartments] === First 30 rows of ${sheetName} ===`)
-  for (let i = 0; i < Math.min(30, data.length); i++) {
-    const row = data[i]
-    if (row) {
-      const preview = row.slice(0, 8).map(c => {
-        const s = String(c || '')
-        return s.length > 15 ? s.substring(0, 15) + '...' : s
-      })
-      console.log(`[parseSheetWithDepartments] Row ${i}: [${preview.join(' | ')}]`)
-    }
-  }
-
-  let currentSection = null // 'teamSummary' or 'ranking'
-  let headerRow = null
-  let headerRowIndex = -1
-  let currentDepartmentName = null
-  let columnMap = {} // ヘッダー列名 -> インデックスのマッピング
-  const departmentMap = {} // チーム名 -> ランキングデータ
-
-  /**
-   * 行が空かどうかを判定
-   */
-  const isEmptyRow = (row) => {
-    if (!row) return true
-    return row.every(cell => cell === null || cell === undefined || String(cell).trim() === '')
-  }
-
-  /**
-   * セクションタイトル行かどうかを判定（【】で囲まれた行）
-   * 行内のすべてのセルをチェックし、【】を含むセルを探す
-   */
-  const isSectionTitleRow = (row) => {
-    if (!row) return false
-    // 行内のすべてのセルをチェック
-    for (const cell of row) {
-      const cellStr = String(cell || '').trim()
-      if (cellStr.startsWith('【') && cellStr.includes('】')) {
-        return true
-      }
-    }
-    return false
-  }
-
-  /**
-   * 行からセクションタイトルを抽出
-   */
-  const getSectionTitle = (row) => {
-    if (!row) return null
-    for (const cell of row) {
-      const cellStr = String(cell || '').trim()
-      if (cellStr.startsWith('【') && cellStr.includes('】')) {
-        return cellStr
-      }
-    }
-    return null
-  }
-
-  /**
-   * セクションタイトルから部門名を抽出
-   * 例: 【東京マネジメント個人ランキング】-> マネジメント
-   *     【東京制作1個人ランキング】-> 制作1
-   *     【名古屋個人ランキング】-> 名古屋（部門なしの場合は地域名を返す）
-   *     【東京営業所個人ランキング】-> 東京営業所（企画開発シートでは地域名を除外しない）
-   */
-  const extractDepartmentFromTitle = (title) => {
-    // 【...個人ランキング】のパターンにマッチ
-    const match = title.match(/【(.+?)個人ランキング】/)
-    if (!match) return null
-
-    let content = match[1].trim()
-
-    // 企画開発シートの場合は地域名を除外しない（東京営業所、沖縄営業所をそのまま使う）
-    if (sheetName === '企画開発') {
-      return content
-    }
-
-    // 地域名のパターン（これらを除外して部門名を抽出）
-    const regions = ['東京', '大阪', '名古屋', '企画開発']
-    let usedRegion = null
-
-    // 地域名を先頭から除外
-    for (const region of regions) {
-      if (content.startsWith(region)) {
-        usedRegion = region
-        content = content.substring(region.length)
-        break
-      }
-    }
-
-    // 先頭のスペース（半角・全角）を削除
-    content = content.replace(/^[\s　]+/, '').trim()
-
-    // 部門名が空の場合は地域名を返す（名古屋対応）
-    if (!content && usedRegion) {
-      return usedRegion
-    }
-
-    return content || null
-  }
-
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i]
-
-    // 空行はセクション区切りとして扱う
-    if (isEmptyRow(row)) {
-      // 現在のセクションをリセット（新しいセクションの可能性）
-      currentSection = null
-      headerRow = null
-      headerRowIndex = -1
-      continue
-    }
-
-    // セクションタイトル行の処理（【】形式）
-    if (isSectionTitleRow(row)) {
-      const title = getSectionTitle(row)
-      console.log(`[parseSheetWithDepartments] Found section title: ${title}`)
-
-      // セクションタイトルからセクションタイプを判定
-      if (title && title.includes('チーム別サマリー')) {
-        currentSection = 'teamSummary'
-        currentDepartmentName = null
-        headerRow = null // 次の行がヘッダー行
-        headerRowIndex = -1
-        console.log(`[parseSheetWithDepartments] Section type: teamSummary`)
-      } else if (title && title.includes('個人ランキング')) {
-        currentSection = 'ranking'
-        headerRow = null // 次の行がヘッダー行
-        headerRowIndex = -1
-        // 個人ランキングセクションの場合、部門名を抽出
-        const deptName = extractDepartmentFromTitle(title)
-        if (deptName) {
-          currentDepartmentName = deptName
-          console.log(`[parseSheetWithDepartments] Section type: ranking, department: ${deptName}`)
-        }
-      }
-      continue
-    }
-
-    // データパターンから直接セクションタイプを判定（セクションタイトルがない場合）
-    const firstCellVal = String(row[0] || '').trim()
-    const secondCellVal = String(row[1] || '').trim()
-    const thirdCellVal = String(row[2] || '').trim()
-    const fourthCellVal = String(row[3] || '').trim()
-    const isFirstCellNumeric = !isNaN(parseInt(firstCellVal)) && parseInt(firstCellVal) > 0
-
-    // セクションが未設定で、最初のセルが数値の場合、データパターンから判定
-    if (!currentSection && isFirstCellNumeric) {
-      // データパターンを分析:
-      // teamSummary: [順位, チーム名, 売上高(¥), 支払高(¥), 粗利益(¥), ...]
-      // ranking: [順位, 氏名, 所属チーム, 売上額(¥), 売上比率(%), ...]
-      //
-      // 判定基準: 3列目(index 2)が金額っぽいならteamSummary、4列目(index 3)が金額っぽいならranking
-      const isThirdColAmount = thirdCellVal.includes('¥') ||
-                               /^[\d,]+$/.test(thirdCellVal.replace(/[¥￥]/g, '')) ||
-                               (parseInt(thirdCellVal.replace(/[¥￥,]/g, '')) > 100000)
-      const isFourthColAmount = fourthCellVal.includes('¥') ||
-                                /^[\d,]+$/.test(fourthCellVal.replace(/[¥￥]/g, '')) ||
-                                (parseInt(fourthCellVal.replace(/[¥￥,]/g, '')) > 100000)
-
-      console.log(`[parseSheetWithDepartments] Row ${i} pattern analysis:`)
-      console.log(`  - firstCellVal: ${firstCellVal}, secondCellVal: ${secondCellVal}`)
-      console.log(`  - thirdCellVal: ${thirdCellVal}, isAmount: ${isThirdColAmount}`)
-      console.log(`  - fourthCellVal: ${fourthCellVal}, isAmount: ${isFourthColAmount}`)
-
-      // 判定ロジック:
-      // - teamSummary: 3列目も4列目も金額（売上高、支払高、粗利益...）
-      // - ranking: 3列目は所属チーム（非金額）、4列目が売上額（金額）
-      if (isThirdColAmount) {
-        // 3列目が金額 → teamSummary
-        currentSection = 'teamSummary'
-        headerRow = 'auto'
-        headerRowIndex = i - 1
-        console.log(`[parseSheetWithDepartments] Auto-detected teamSummary from data pattern at row ${i}`)
-      } else if (!isThirdColAmount && isFourthColAmount) {
-        // 3列目が非金額で4列目が金額 → ranking
-        currentSection = 'ranking'
-        headerRow = 'auto'
-        headerRowIndex = i - 1
-        columnMap = { rank: 0, name: 1, team: 2, sales: 3, salesRatio: 4, profit: 5, profitRatio: 6, profitRate: 7 }
-        console.log(`[parseSheetWithDepartments] Auto-detected ranking from data pattern at row ${i}`)
-      }
-    }
-
-    // セクションが設定されていてヘッダー行が未設定の場合、現在の行をヘッダーとして扱う
-    if (currentSection && !headerRow) {
-      const firstCellStr = String(row[0] || '').trim()
-      // 順位が数値の場合はデータ行なのでスキップ、それ以外はヘッダー行
-      if (isNaN(parseInt(firstCellStr))) {
-        headerRow = row
-        headerRowIndex = i
-        console.log(`[parseSheetWithDepartments] Found header for ${currentSection} at row ${i}`)
-
-        // ランキングの場合は列マッピングを設定
-        if (currentSection === 'ranking') {
-          columnMap = {}
-          row.forEach((cell, idx) => {
-            const cellStr = String(cell || '').trim()
-            if (cellStr.includes('順位')) columnMap.rank = idx
-            if (cellStr === '氏名') columnMap.name = idx
-            if (cellStr.includes('所属') || cellStr === '所属チーム') columnMap.team = idx
-            if (cellStr === '売上額' || cellStr.includes('売上額') || cellStr.includes('売上')) columnMap.sales = idx
-            if (cellStr.includes('部内売上比率') || cellStr.includes('売上比率')) columnMap.salesRatio = idx
-            if (cellStr === '粗利額' || cellStr.includes('粗利額') || cellStr.includes('粗利益')) columnMap.profit = idx
-            if (cellStr.includes('部内粗利比率') || cellStr.includes('粗利比率')) columnMap.profitRatio = idx
-            if (cellStr === '粗利益率' || cellStr.includes('粗利益率')) columnMap.profitRate = idx
-          })
-
-          // フォールバック
-          if (columnMap.name !== undefined && columnMap.sales === undefined) {
-            const nameIdx = columnMap.name
-            if (columnMap.team === undefined) columnMap.team = nameIdx + 1
-            columnMap.sales = columnMap.team !== undefined ? columnMap.team + 1 : nameIdx + 2
-            columnMap.salesRatio = columnMap.sales + 1
-            columnMap.profit = columnMap.salesRatio + 1
-            columnMap.profitRatio = columnMap.profit + 1
-            columnMap.profitRate = columnMap.profitRatio + 1
-            console.log(`[parseSheetWithDepartments] Using fallback column mapping`)
-          }
-          console.log(`[parseSheetWithDepartments] Column mapping:`, JSON.stringify(columnMap))
-        }
-        continue
-      }
-    }
-
-    // ヘッダー行を検出（セクションタイトルがない場合の対応も含む）
-    const rowStr = row.map(c => String(c || '')).join(' ')
-    // 注: firstCellVal, secondCellValは既に上で宣言済み
-    const hasTeamHeader = row.some(cell => String(cell || '').trim() === 'チーム')
-    const hasNameHeader = row.some(cell => String(cell || '').trim() === '氏名')
-    const hasRankHeader = row.some(cell => String(cell || '').includes('順位'))
-    const hasBelongTeamHeader = row.some(cell => String(cell || '').includes('所属'))
-    const hasSalesHeader = row.some(cell => String(cell || '').includes('売上'))
-
-    // データ行の直前にあるヘッダー行を検出
-    // 次の行を先読みしてデータ行かどうかを確認
-    let nextRowIsData = false
-    if (i + 1 < data.length) {
-      const nextRow = data[i + 1]
-      if (nextRow) {
-        const nextFirstCell = String(nextRow[0] || '').trim()
-        nextRowIsData = !isNaN(parseInt(nextFirstCell)) && parseInt(nextFirstCell) > 0
-      }
-    }
-
-    // ヘッダー行の検出条件を緩和
-    const isHeader = (hasRankHeader && (hasTeamHeader || hasNameHeader)) ||
-                     (hasNameHeader && hasSalesHeader) ||
-                     (hasTeamHeader && hasSalesHeader && !hasNameHeader) ||
-                     (hasNameHeader && hasBelongTeamHeader) ||
-                     // 次の行がデータ行で、現在行が非数値で始まる場合もヘッダーとして扱う
-                     (nextRowIsData && isNaN(parseInt(firstCellVal)) && (hasTeamHeader || hasNameHeader || secondCellVal))
-
-    if (isHeader) {
-      // 新しいヘッダー行を発見
-      // セクションタイプを判定：「チーム」があり「氏名」「所属」がない → teamSummary
-      // または次の行のデータパターンから判定
-      let detectedSection = null
-
-      if (hasTeamHeader && !hasNameHeader && !hasBelongTeamHeader) {
-        detectedSection = 'teamSummary'
-      } else if (hasNameHeader) {
-        detectedSection = 'ranking'
-      } else if (nextRowIsData && i + 1 < data.length) {
-        // データパターンから判定：2列目が「¥」で始まるか金額っぽい場合はteamSummary
-        const nextRow = data[i + 1]
-        const nextSecondCell = String(nextRow[1] || '').trim()
-        if (nextSecondCell.includes('¥') || /^\d/.test(nextSecondCell)) {
-          // 2列目が金額の場合はteamSummary（ただし3列目以降も金額かチェック）
-          const nextThirdCell = String(nextRow[2] || '').trim()
-          if (nextThirdCell.includes('¥') || /^[\d,]+$/.test(nextThirdCell.replace(/[¥,]/g, ''))) {
-            detectedSection = 'teamSummary'
-          } else {
-            detectedSection = 'ranking'
-          }
-        } else {
-          detectedSection = 'ranking'
-        }
-      }
-
-      if (detectedSection === 'teamSummary') {
-        currentSection = 'teamSummary'
-        currentDepartmentName = null
-        console.log(`[parseSheetWithDepartments] Found teamSummary header at row ${i}: ${rowStr.substring(0, 80)}`)
-      } else if (detectedSection === 'ranking') {
-        // 個人ランキングのヘッダー
-        currentSection = 'ranking'
-        // 注: セクションタイトル【】がない場合、currentDepartmentNameはnullのまま
-        // その場合は各データ行の所属チーム列（belongTeam）を使用する
-
-        // ヘッダー行から列インデックスを動的に取得（所属チーム列がないシート対応）
-        columnMap = {}
-        row.forEach((cell, idx) => {
-          const cellStr = String(cell || '').trim()
-          if (cellStr.includes('順位')) columnMap.rank = idx
-          if (cellStr === '氏名') columnMap.name = idx
-          if (cellStr.includes('所属') || cellStr === '所属チーム') columnMap.team = idx
-          if (cellStr === '売上額' || cellStr.includes('売上額') || cellStr.includes('売上')) columnMap.sales = idx
-          if (cellStr.includes('部内売上比率') || cellStr.includes('売上比率')) columnMap.salesRatio = idx
-          if (cellStr === '粗利額' || cellStr.includes('粗利額') || cellStr.includes('粗利益')) columnMap.profit = idx
-          if (cellStr.includes('部内粗利比率') || cellStr.includes('粗利比率')) columnMap.profitRatio = idx
-          if (cellStr === '粗利益率' || cellStr.includes('粗利益率')) columnMap.profitRate = idx
-        })
-
-        // gviz APIでヘッダー列名が取得できない場合のフォールバック（デフォルト位置を使用）
-        if (columnMap.name !== undefined && columnMap.sales === undefined) {
-          // 「氏名」があるが「売上額」がない場合、標準的な列配置を適用
-          const nameIdx = columnMap.name
-          if (columnMap.team === undefined) columnMap.team = nameIdx + 1
-          columnMap.sales = columnMap.team !== undefined ? columnMap.team + 1 : nameIdx + 2
-          columnMap.salesRatio = columnMap.sales + 1
-          columnMap.profit = columnMap.salesRatio + 1
-          columnMap.profitRatio = columnMap.profit + 1
-          columnMap.profitRate = columnMap.profitRatio + 1
-          console.log(`[parseSheetWithDepartments] Using fallback column mapping`)
-        }
-        console.log(`[parseSheetWithDepartments] Found ranking header at row ${i}: ${rowStr.substring(0, 80)}`)
-        console.log(`[parseSheetWithDepartments] Column mapping:`, JSON.stringify(columnMap))
-      }
-      headerRow = row
-      headerRowIndex = i
-      continue
-    }
-
-    // データ行を処理
-    if (headerRow && i > headerRowIndex) {
-      const firstCell = row[0]
-      const firstCellStr = String(firstCell || '').trim()
-
-      // 空セル、合計行、セクションタイトルはスキップ
-      if (firstCell === null || firstCell === undefined || firstCellStr === '' ||
-          firstCellStr.includes('合計') || firstCellStr.startsWith('【')) {
-        continue
-      }
-
-      // 次のヘッダー行に到達したかチェック
-      if (row.some(cell => String(cell || '').trim() === '氏名') ||
-          (row.some(cell => String(cell || '').trim() === 'チーム') && row.some(cell => String(cell || '').includes('順位')))) {
-        // 次のヘッダー行なので、この行を再処理
-        headerRow = null
-        headerRowIndex = -1
-        i--
-        continue
-      }
-
-      // 順位が数値でない行はスキップ（ヘッダーやタイトル行の可能性）
-      const rankValue = parseInt(firstCellStr)
-      if (isNaN(rankValue)) {
-        continue
-      }
-
-      if (currentSection === 'teamSummary') {
-        // チーム別サマリーのデータ
-        const team = {
-          rank: rankValue || result.teamSummary.length + 1,
-          team: String(row[1] || '').trim(),
-          sales: parseAmount(row[2]),
-          expense: parseAmount(row[3]),
-          profit: parseAmount(row[4]),
-          profitRate: parsePercent(row[5]),
-          salesRatio: parsePercent(row[6]),
-          profitRatio: parsePercent(row[7])
-        }
-        if (team.team && team.team !== '-') {
-          result.teamSummary.push(team)
-          console.log(`[parseSheetWithDepartments] TeamSummary: rank=${team.rank}, team=${team.team}, sales=${team.sales}`)
-        }
-      } else if (currentSection === 'ranking') {
-        // 個人ランキングのデータ（動的列マッピングを使用）
-        const belongTeam = columnMap.team !== undefined ? String(row[columnMap.team] || '').trim() : ''
-        const person = {
-          rank: rankValue || 1,
-          name: columnMap.name !== undefined ? String(row[columnMap.name] || '').trim() : String(row[1] || '').trim(),
-          team: belongTeam,
-          sales: columnMap.sales !== undefined ? parseAmount(row[columnMap.sales]) : 0,
-          salesRatio: columnMap.salesRatio !== undefined ? parsePercent(row[columnMap.salesRatio]) : 0,
-          profit: columnMap.profit !== undefined ? parseAmount(row[columnMap.profit]) : 0,
-          profitRatio: columnMap.profitRatio !== undefined ? parsePercent(row[columnMap.profitRatio]) : 0,
-          profitRate: columnMap.profitRate !== undefined ? parsePercent(row[columnMap.profitRate]) : 0
-        }
-
-        if (person.name && person.name !== '氏名' && person.name !== '-') {
-          // 部門名の決定: セクションタイトルから抽出した名前 > 所属チーム列 > その他
-          const teamKey = currentDepartmentName || belongTeam || 'その他'
-
-          if (!departmentMap[teamKey]) {
-            departmentMap[teamKey] = []
-          }
-          departmentMap[teamKey].push(person)
-          console.log(`[parseSheetWithDepartments] Ranking: ${person.name} -> ${teamKey}, sales=${person.sales}`)
-        }
-      }
-    }
-  }
-
-  // departmentMapをdepartments配列に変換
-  // チーム別サマリーの順序に合わせてソート
-  const teamOrder = result.teamSummary.map(t => t.team)
-  const sortedTeamNames = Object.keys(departmentMap).sort((a, b) => {
-    const idxA = teamOrder.indexOf(a)
-    const idxB = teamOrder.indexOf(b)
-    if (idxA === -1 && idxB === -1) return a.localeCompare(b)
-    if (idxA === -1) return 1
-    if (idxB === -1) return -1
-    return idxA - idxB
-  })
-
-  for (const teamName of sortedTeamNames) {
-    const rankings = departmentMap[teamName]
-    // 売上額でソートして順位を振り直す
-    rankings.sort((a, b) => (b.sales || 0) - (a.sales || 0))
-    rankings.forEach((person, idx) => {
-      person.rank = idx + 1
-    })
-    result.departments.push({
-      name: teamName,
-      rankings: rankings
-    })
-  }
-
-  console.log(`[parseSheetWithDepartments] === ${sheetName} Parse Complete ===`)
-  console.log(`[parseSheetWithDepartments] Team Summary: ${result.teamSummary.length} teams`)
-  result.teamSummary.forEach(t => {
-    console.log(`  - ${t.team}: sales=${t.sales}, profit=${t.profit}`)
-  })
-  console.log(`[parseSheetWithDepartments] Departments: ${result.departments.length}`)
-  result.departments.forEach(dept => {
-    console.log(`  - ${dept.name}: ${dept.rankings.length} people`)
-  })
-
-  return result
-}
-
-/**
- * ヘッダー行を探してランキングデータをパース（全体シート用）
- */
-const parseRankingByHeader = (data) => {
-  console.log('[parseRankingByHeader] Starting... data length:', data.length)
-  
-  const allResults = []
-  
-  for (let i = 0; i < data.length; i++) {
-    const row = data[i]
-    if (!row) continue
-    
-    // 「氏名」を含む行をヘッダーとして検出
-    const hasName = row.some(cell => String(cell || '').includes('氏名'))
-    const hasTeamOrSales = row.some(cell => {
-      const s = String(cell || '')
-      return s.includes('所属') || s.includes('チーム') || s.includes('売上')
-    })
-    
-    if (hasName && hasTeamOrSales) {
-      console.log(`[parseRankingByHeader] Found header at row ${i}:`, row.slice(0, 8))
-      
-      // 固定インデックスを使用
-      // 全体シート構造: 順位(0), 氏名(1), 所属チーム(2), 売上額(3), 売上比率(4), 粗利額(5), 粗利比率(6), 粗利益率(7)
-      const colRank = 0
-      const colName = 1
-      const colTeam = 2
-      const colSales = 3
-      const colSalesRatio = 4
-      const colProfit = 5
-      const colProfitRatio = 6
-      const colProfitRate = 7
-      
-      // ヘッダーの次の行からデータを読み取る
-      for (let j = i + 1; j < data.length; j++) {
-        const dataRow = data[j]
-        if (!dataRow) continue
-        
-        // 次のヘッダー行に到達したら終了
-        const isNextHeader = dataRow.some(cell => String(cell || '').includes('氏名'))
-        if (isNextHeader && j > i + 1) {
-          break
-        }
-        
-        // 名前が空ならスキップ
-        const name = String(dataRow[colName] || '').trim()
-        if (!name) continue
-        if (name === '氏名' || name === '名前' || /^\d+$/.test(name)) continue
-        
-        let rank = parseInt(dataRow[colRank]) || 0
-        if (rank === 0) {
-          rank = allResults.length + 1
-        }
-        
-        const entry = {
-          rank: rank,
-          name: name,
-          team: String(dataRow[colTeam] || '').trim(),
-          sales: parseAmount(dataRow[colSales]),
-          salesRatio: parsePercent(dataRow[colSalesRatio]),
-          profit: parseAmount(dataRow[colProfit]),
-          profitRatio: parsePercent(dataRow[colProfitRatio]),
-          profitRate: parsePercent(dataRow[colProfitRate])
-        }
-        
-        allResults.push(entry)
-      }
-    }
-  }
-  
-  console.log(`[parseRankingByHeader] Total parsed: ${allResults.length} records`)
-  return allResults
-}
-
-/**
- * ローカルストレージから売上ランキングデータを取得
- */
-export const getSalesRankingFromStorage = () => {
-  const stored = localStorage.getItem('salesRanking')
-  if (!stored) return null
-  try {
-    return JSON.parse(stored)
-  } catch {
-    return null
-  }
-}
-
-/**
- * 売上ランキングデータをローカルストレージに保存
- */
-export const saveSalesRankingToStorage = (data) => {
-  localStorage.setItem('salesRanking', JSON.stringify(data))
 }
 
 /**
@@ -787,7 +160,7 @@ export const convertEvaluationToNumber = (evaluation) => {
  */
 export const convertToStructuredData = (rawData, type) => {
   if (!rawData || rawData.length === 0) return []
-  
+
   if (type === 'master') {
     return rawData.slice(1).map(row => ({
       id: row[0],
@@ -797,11 +170,11 @@ export const convertToStructuredData = (rawData, type) => {
       role: row[4]
     }))
   }
-  
+
   if (type === 'evaluation') {
     return rawData
   }
-  
+
   return rawData
 }
 
@@ -811,10 +184,10 @@ export const convertToStructuredData = (rawData, type) => {
 export const mergeEvaluationData = (existingData, newData) => {
   if (!existingData || existingData.length === 0) return newData
   if (!newData || newData.length === 0) return existingData
-  
+
   // 新しいデータで既存データを上書き
   const merged = [...existingData]
-  
+
   newData.forEach(newRow => {
     const existingIndex = merged.findIndex(row => row[0] === newRow[0])
     if (existingIndex >= 0) {
@@ -823,6 +196,6 @@ export const mergeEvaluationData = (existingData, newData) => {
       merged.push(newRow)
     }
   })
-  
+
   return merged
 }

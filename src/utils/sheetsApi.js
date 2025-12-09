@@ -305,6 +305,9 @@ const parseSheetWithDepartments = (data, sheetName) => {
     // 空行はセクション区切りとして扱う
     if (isEmptyRow(row)) {
       // 現在のセクションをリセット（新しいセクションの可能性）
+      currentSection = null
+      headerRow = null
+      headerRowIndex = -1
       continue
     }
 
@@ -332,6 +335,51 @@ const parseSheetWithDepartments = (data, sheetName) => {
         }
       }
       continue
+    }
+
+    // データパターンから直接セクションタイプを判定（セクションタイトルがない場合）
+    const firstCellVal = String(row[0] || '').trim()
+    const secondCellVal = String(row[1] || '').trim()
+    const thirdCellVal = String(row[2] || '').trim()
+    const fourthCellVal = String(row[3] || '').trim()
+    const isFirstCellNumeric = !isNaN(parseInt(firstCellVal)) && parseInt(firstCellVal) > 0
+
+    // セクションが未設定で、最初のセルが数値の場合、データパターンから判定
+    if (!currentSection && isFirstCellNumeric) {
+      // データパターンを分析:
+      // teamSummary: [順位, チーム名, 売上高(¥), 支払高(¥), 粗利益(¥), ...]
+      // ranking: [順位, 氏名, 所属チーム, 売上額(¥), 売上比率(%), ...]
+      //
+      // 判定基準: 3列目(index 2)が金額っぽいならteamSummary、4列目(index 3)が金額っぽいならranking
+      const isThirdColAmount = thirdCellVal.includes('¥') ||
+                               /^[\d,]+$/.test(thirdCellVal.replace(/[¥￥]/g, '')) ||
+                               (parseInt(thirdCellVal.replace(/[¥￥,]/g, '')) > 100000)
+      const isFourthColAmount = fourthCellVal.includes('¥') ||
+                                /^[\d,]+$/.test(fourthCellVal.replace(/[¥￥]/g, '')) ||
+                                (parseInt(fourthCellVal.replace(/[¥￥,]/g, '')) > 100000)
+
+      console.log(`[parseSheetWithDepartments] Row ${i} pattern analysis:`)
+      console.log(`  - firstCellVal: ${firstCellVal}, secondCellVal: ${secondCellVal}`)
+      console.log(`  - thirdCellVal: ${thirdCellVal}, isAmount: ${isThirdColAmount}`)
+      console.log(`  - fourthCellVal: ${fourthCellVal}, isAmount: ${isFourthColAmount}`)
+
+      // 判定ロジック:
+      // - teamSummary: 3列目も4列目も金額（売上高、支払高、粗利益...）
+      // - ranking: 3列目は所属チーム（非金額）、4列目が売上額（金額）
+      if (isThirdColAmount) {
+        // 3列目が金額 → teamSummary
+        currentSection = 'teamSummary'
+        headerRow = 'auto'
+        headerRowIndex = i - 1
+        console.log(`[parseSheetWithDepartments] Auto-detected teamSummary from data pattern at row ${i}`)
+      } else if (!isThirdColAmount && isFourthColAmount) {
+        // 3列目が非金額で4列目が金額 → ranking
+        currentSection = 'ranking'
+        headerRow = 'auto'
+        headerRowIndex = i - 1
+        columnMap = { rank: 0, name: 1, team: 2, sales: 3, salesRatio: 4, profit: 5, profitRatio: 6, profitRate: 7 }
+        console.log(`[parseSheetWithDepartments] Auto-detected ranking from data pattern at row ${i}`)
+      }
     }
 
     // セクションが設定されていてヘッダー行が未設定の場合、現在の行をヘッダーとして扱う
@@ -377,8 +425,7 @@ const parseSheetWithDepartments = (data, sheetName) => {
 
     // ヘッダー行を検出（セクションタイトルがない場合の対応も含む）
     const rowStr = row.map(c => String(c || '')).join(' ')
-    const firstCellVal = String(row[0] || '').trim()
-    const secondCellVal = String(row[1] || '').trim()
+    // 注: firstCellVal, secondCellValは既に上で宣言済み
     const hasTeamHeader = row.some(cell => String(cell || '').trim() === 'チーム')
     const hasNameHeader = row.some(cell => String(cell || '').trim() === '氏名')
     const hasRankHeader = row.some(cell => String(cell || '').includes('順位'))

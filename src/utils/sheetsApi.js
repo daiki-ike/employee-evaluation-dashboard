@@ -375,29 +375,68 @@ const parseSheetWithDepartments = (data, sheetName) => {
       }
     }
 
-    // ヘッダー行を検出
+    // ヘッダー行を検出（セクションタイトルがない場合の対応も含む）
     const rowStr = row.map(c => String(c || '')).join(' ')
+    const firstCellVal = String(row[0] || '').trim()
+    const secondCellVal = String(row[1] || '').trim()
     const hasTeamHeader = row.some(cell => String(cell || '').trim() === 'チーム')
     const hasNameHeader = row.some(cell => String(cell || '').trim() === '氏名')
     const hasRankHeader = row.some(cell => String(cell || '').includes('順位'))
     const hasBelongTeamHeader = row.some(cell => String(cell || '').includes('所属'))
     const hasSalesHeader = row.some(cell => String(cell || '').includes('売上'))
 
-    // ヘッダー行の検出条件を緩和（「順位」がなくても「氏名」+「売上」or「氏名」+「所属」があればヘッダー）
+    // データ行の直前にあるヘッダー行を検出
+    // 次の行を先読みしてデータ行かどうかを確認
+    let nextRowIsData = false
+    if (i + 1 < data.length) {
+      const nextRow = data[i + 1]
+      if (nextRow) {
+        const nextFirstCell = String(nextRow[0] || '').trim()
+        nextRowIsData = !isNaN(parseInt(nextFirstCell)) && parseInt(nextFirstCell) > 0
+      }
+    }
+
+    // ヘッダー行の検出条件を緩和
     const isHeader = (hasRankHeader && (hasTeamHeader || hasNameHeader)) ||
                      (hasNameHeader && hasSalesHeader) ||
                      (hasTeamHeader && hasSalesHeader && !hasNameHeader) ||
-                     (hasNameHeader && hasBelongTeamHeader)
+                     (hasNameHeader && hasBelongTeamHeader) ||
+                     // 次の行がデータ行で、現在行が非数値で始まる場合もヘッダーとして扱う
+                     (nextRowIsData && isNaN(parseInt(firstCellVal)) && (hasTeamHeader || hasNameHeader || secondCellVal))
 
     if (isHeader) {
       // 新しいヘッダー行を発見
+      // セクションタイプを判定：「チーム」があり「氏名」「所属」がない → teamSummary
+      // または次の行のデータパターンから判定
+      let detectedSection = null
+
       if (hasTeamHeader && !hasNameHeader && !hasBelongTeamHeader) {
-        // チーム別サマリーのヘッダー（「チーム」があり「氏名」「所属」がない）
+        detectedSection = 'teamSummary'
+      } else if (hasNameHeader) {
+        detectedSection = 'ranking'
+      } else if (nextRowIsData && i + 1 < data.length) {
+        // データパターンから判定：2列目が「¥」で始まるか金額っぽい場合はteamSummary
+        const nextRow = data[i + 1]
+        const nextSecondCell = String(nextRow[1] || '').trim()
+        if (nextSecondCell.includes('¥') || /^\d/.test(nextSecondCell)) {
+          // 2列目が金額の場合はteamSummary（ただし3列目以降も金額かチェック）
+          const nextThirdCell = String(nextRow[2] || '').trim()
+          if (nextThirdCell.includes('¥') || /^[\d,]+$/.test(nextThirdCell.replace(/[¥,]/g, ''))) {
+            detectedSection = 'teamSummary'
+          } else {
+            detectedSection = 'ranking'
+          }
+        } else {
+          detectedSection = 'ranking'
+        }
+      }
+
+      if (detectedSection === 'teamSummary') {
         currentSection = 'teamSummary'
         currentDepartmentName = null
         console.log(`[parseSheetWithDepartments] Found teamSummary header at row ${i}: ${rowStr.substring(0, 80)}`)
-      } else if (hasNameHeader) {
-        // 個人ランキングのヘッダー（「氏名」がある）
+      } else if (detectedSection === 'ranking') {
+        // 個人ランキングのヘッダー
         currentSection = 'ranking'
         // 注: セクションタイトル【】がない場合、currentDepartmentNameはnullのまま
         // その場合は各データ行の所属チーム列（belongTeam）を使用する

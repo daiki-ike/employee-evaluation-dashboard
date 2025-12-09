@@ -313,13 +313,66 @@ const parseSheetWithDepartments = (data, sheetName) => {
       const title = getSectionTitle(row)
       console.log(`[parseSheetWithDepartments] Found section title: ${title}`)
 
-      // 個人ランキングセクションの場合、部門名を抽出
-      const deptName = extractDepartmentFromTitle(title)
-      if (deptName) {
-        currentDepartmentName = deptName
-        console.log(`[parseSheetWithDepartments] Extracted department: ${deptName}`)
+      // セクションタイトルからセクションタイプを判定
+      if (title && title.includes('チーム別サマリー')) {
+        currentSection = 'teamSummary'
+        currentDepartmentName = null
+        headerRow = null // 次の行がヘッダー行
+        headerRowIndex = -1
+        console.log(`[parseSheetWithDepartments] Section type: teamSummary`)
+      } else if (title && title.includes('個人ランキング')) {
+        currentSection = 'ranking'
+        headerRow = null // 次の行がヘッダー行
+        headerRowIndex = -1
+        // 個人ランキングセクションの場合、部門名を抽出
+        const deptName = extractDepartmentFromTitle(title)
+        if (deptName) {
+          currentDepartmentName = deptName
+          console.log(`[parseSheetWithDepartments] Section type: ranking, department: ${deptName}`)
+        }
       }
       continue
+    }
+
+    // セクションが設定されていてヘッダー行が未設定の場合、現在の行をヘッダーとして扱う
+    if (currentSection && !headerRow) {
+      const firstCellStr = String(row[0] || '').trim()
+      // 順位が数値の場合はデータ行なのでスキップ、それ以外はヘッダー行
+      if (isNaN(parseInt(firstCellStr))) {
+        headerRow = row
+        headerRowIndex = i
+        console.log(`[parseSheetWithDepartments] Found header for ${currentSection} at row ${i}`)
+
+        // ランキングの場合は列マッピングを設定
+        if (currentSection === 'ranking') {
+          columnMap = {}
+          row.forEach((cell, idx) => {
+            const cellStr = String(cell || '').trim()
+            if (cellStr.includes('順位')) columnMap.rank = idx
+            if (cellStr === '氏名') columnMap.name = idx
+            if (cellStr.includes('所属') || cellStr === '所属チーム') columnMap.team = idx
+            if (cellStr === '売上額' || cellStr.includes('売上額') || cellStr.includes('売上')) columnMap.sales = idx
+            if (cellStr.includes('部内売上比率') || cellStr.includes('売上比率')) columnMap.salesRatio = idx
+            if (cellStr === '粗利額' || cellStr.includes('粗利額') || cellStr.includes('粗利益')) columnMap.profit = idx
+            if (cellStr.includes('部内粗利比率') || cellStr.includes('粗利比率')) columnMap.profitRatio = idx
+            if (cellStr === '粗利益率' || cellStr.includes('粗利益率')) columnMap.profitRate = idx
+          })
+
+          // フォールバック
+          if (columnMap.name !== undefined && columnMap.sales === undefined) {
+            const nameIdx = columnMap.name
+            if (columnMap.team === undefined) columnMap.team = nameIdx + 1
+            columnMap.sales = columnMap.team !== undefined ? columnMap.team + 1 : nameIdx + 2
+            columnMap.salesRatio = columnMap.sales + 1
+            columnMap.profit = columnMap.salesRatio + 1
+            columnMap.profitRatio = columnMap.profit + 1
+            columnMap.profitRate = columnMap.profitRatio + 1
+            console.log(`[parseSheetWithDepartments] Using fallback column mapping`)
+          }
+          console.log(`[parseSheetWithDepartments] Column mapping:`, JSON.stringify(columnMap))
+        }
+        continue
+      }
     }
 
     // ヘッダー行を検出

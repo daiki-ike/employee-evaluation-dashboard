@@ -330,10 +330,11 @@ const parseSheetWithDepartments = (data, sheetName) => {
     const hasBelongTeamHeader = row.some(cell => String(cell || '').includes('所属'))
     const hasSalesHeader = row.some(cell => String(cell || '').includes('売上'))
 
-    // ヘッダー行の検出条件を緩和（「順位」がなくても「氏名」+「売上」があればヘッダー）
+    // ヘッダー行の検出条件を緩和（「順位」がなくても「氏名」+「売上」or「氏名」+「所属」があればヘッダー）
     const isHeader = (hasRankHeader && (hasTeamHeader || hasNameHeader)) ||
                      (hasNameHeader && hasSalesHeader) ||
-                     (hasTeamHeader && hasSalesHeader && !hasNameHeader)
+                     (hasTeamHeader && hasSalesHeader && !hasNameHeader) ||
+                     (hasNameHeader && hasBelongTeamHeader)
 
     if (isHeader) {
       // 新しいヘッダー行を発見
@@ -355,12 +356,25 @@ const parseSheetWithDepartments = (data, sheetName) => {
           if (cellStr.includes('順位')) columnMap.rank = idx
           if (cellStr === '氏名') columnMap.name = idx
           if (cellStr.includes('所属') || cellStr === '所属チーム') columnMap.team = idx
-          if (cellStr === '売上額' || cellStr.includes('売上額')) columnMap.sales = idx
-          if (cellStr.includes('部内売上比率')) columnMap.salesRatio = idx
-          if (cellStr === '粗利額' || cellStr.includes('粗利額')) columnMap.profit = idx
-          if (cellStr.includes('部内粗利比率')) columnMap.profitRatio = idx
+          if (cellStr === '売上額' || cellStr.includes('売上額') || cellStr.includes('売上')) columnMap.sales = idx
+          if (cellStr.includes('部内売上比率') || cellStr.includes('売上比率')) columnMap.salesRatio = idx
+          if (cellStr === '粗利額' || cellStr.includes('粗利額') || cellStr.includes('粗利益')) columnMap.profit = idx
+          if (cellStr.includes('部内粗利比率') || cellStr.includes('粗利比率')) columnMap.profitRatio = idx
           if (cellStr === '粗利益率' || cellStr.includes('粗利益率')) columnMap.profitRate = idx
         })
+
+        // gviz APIでヘッダー列名が取得できない場合のフォールバック（デフォルト位置を使用）
+        if (columnMap.name !== undefined && columnMap.sales === undefined) {
+          // 「氏名」があるが「売上額」がない場合、標準的な列配置を適用
+          const nameIdx = columnMap.name
+          if (columnMap.team === undefined) columnMap.team = nameIdx + 1
+          columnMap.sales = columnMap.team !== undefined ? columnMap.team + 1 : nameIdx + 2
+          columnMap.salesRatio = columnMap.sales + 1
+          columnMap.profit = columnMap.salesRatio + 1
+          columnMap.profitRatio = columnMap.profit + 1
+          columnMap.profitRate = columnMap.profitRatio + 1
+          console.log(`[parseSheetWithDepartments] Using fallback column mapping`)
+        }
         console.log(`[parseSheetWithDepartments] Found ranking header at row ${i}: ${rowStr.substring(0, 80)}`)
         console.log(`[parseSheetWithDepartments] Column mapping:`, JSON.stringify(columnMap))
       }

@@ -328,8 +328,14 @@ const parseSheetWithDepartments = (data, sheetName) => {
     const hasNameHeader = row.some(cell => String(cell || '').trim() === '氏名')
     const hasRankHeader = row.some(cell => String(cell || '').includes('順位'))
     const hasBelongTeamHeader = row.some(cell => String(cell || '').includes('所属'))
+    const hasSalesHeader = row.some(cell => String(cell || '').includes('売上'))
 
-    if (hasRankHeader && (hasTeamHeader || hasNameHeader)) {
+    // ヘッダー行の検出条件を緩和（「順位」がなくても「氏名」+「売上」があればヘッダー）
+    const isHeader = (hasRankHeader && (hasTeamHeader || hasNameHeader)) ||
+                     (hasNameHeader && hasSalesHeader) ||
+                     (hasTeamHeader && hasSalesHeader && !hasNameHeader)
+
+    if (isHeader) {
       // 新しいヘッダー行を発見
       if (hasTeamHeader && !hasNameHeader && !hasBelongTeamHeader) {
         // チーム別サマリーのヘッダー（「チーム」があり「氏名」「所属」がない）

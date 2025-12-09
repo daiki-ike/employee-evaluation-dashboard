@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchSheetData, convertToStructuredData, mergeEvaluationData, fetchAllSalesSheets } from '../utils/sheetsApi'
+import { fetchSheetData, convertToStructuredData, mergeEvaluationData } from '../utils/sheetsApi'
+import { fetchAllSalesSheets } from '../utils/salesApi'
 import './DataUpload.css'
 
 const DataUpload = ({ onUpload }) => {

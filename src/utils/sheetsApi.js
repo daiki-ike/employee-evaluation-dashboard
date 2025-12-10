@@ -170,46 +170,87 @@ export const convertToStructuredData = (rawData, type) => {
   // A列: カテゴリー番号, B列: 設問番号, C列: 大項目, D列: 評価方法, E列: 中項目, F列: 審査内容
   if (type === 'master' || type === 'evaluationMaster') {
     const result = []
-    rawData.slice(1).forEach((row, idx) => {
-      // 設問番号がある行のみ処理（ヘッダー行や空行をスキップ）
-      const questionNo = parseInt(row[1])
-      if (!isNaN(questionNo) && questionNo > 0) {
+    let skippedCount = 0
+
+    // 最初の10行の詳細をログ
+    console.log('[convertToStructuredData] === First 10 rows detail ===')
+    for (let i = 0; i < Math.min(10, rawData.length); i++) {
+      const row = rawData[i]
+      console.log(`  Row ${i}: cols=${row?.length}, [0]=${row?.[0]}, [1]=${row?.[1]}, [2]=${String(row?.[2] || '').substring(0, 20)}, [5]=${String(row?.[5] || '').substring(0, 20)}`)
+    }
+
+    rawData.forEach((row, idx) => {
+      if (!row) {
+        skippedCount++
+        return
+      }
+
+      // 設問番号をB列から取得、なければ連番を使用
+      let questionNo = parseInt(row[1])
+      if (isNaN(questionNo) || questionNo <= 0) {
+        // B列が空の場合、A列のカテゴリ番号とインデックスから推測
+        // または単純に連番を振る
+        questionNo = result.length + 1
+      }
+
+      // 審査内容を取得（F列 = index 5）- これが設問のテキスト
+      const criteria = String(row[5] || '').trim()
+      const majorCategory = String(row[2] || '').trim()
+      const minorCategory = String(row[4] || '').trim()
+
+      // ヘッダー行チェック
+      const isHeader = String(row[0] || '').includes('カテゴリ') ||
+                       String(row[1] || '').includes('設問') ||
+                       String(row[2] || '').includes('大項目')
+
+      // 審査内容(criteria)がある行のみを有効な設問として処理
+      // criteriaが空の行はカテゴリ見出し行の可能性が高い
+      if (criteria && !isHeader) {
         result.push({
-          questionNo: questionNo,           // B列: 設問番号
-          categoryNo: row[0],               // A列: カテゴリー番号
-          majorCategory: String(row[2] || '').trim(),  // C列: 大項目
-          majorCategoryDesc: String(row[3] || '').trim(), // D列: 評価方法
-          minorCategory: String(row[4] || '').trim(),  // E列: 中項目
-          criteria: String(row[5] || '').trim()        // F列: 審査内容
+          questionNo: questionNo,
+          categoryNo: row[0],
+          majorCategory: majorCategory,
+          majorCategoryDesc: String(row[3] || '').trim(),
+          minorCategory: minorCategory,
+          criteria: criteria
         })
-        if (result.length <= 3) {
-          console.log(`[convertToStructuredData] Master row ${result.length}:`, {
+
+        if (result.length <= 5) {
+          console.log(`[convertToStructuredData] Master Q${result.length}:`, {
             questionNo,
             categoryNo: row[0],
-            majorCategory: row[2],
-            minorCategory: row[4],
-            criteria: row[5]?.substring(0, 30)
+            majorCategory: majorCategory.substring(0, 15),
+            criteria: criteria.substring(0, 30)
           })
+        }
+      } else {
+        skippedCount++
+        // 最初の5件のスキップされた行をログ（デバッグ用）
+        if (skippedCount <= 5) {
+          console.log(`[convertToStructuredData] Skipped row ${idx}: criteria="${criteria.substring(0, 20)}", isHeader=${isHeader}`)
         }
       }
     })
-    console.log(`[convertToStructuredData] evaluationMaster: ${result.length} questions`)
+
+    console.log(`[convertToStructuredData] evaluationMaster: ${result.length} questions extracted, ${skippedCount} rows skipped`)
     return result
   }
 
-  // 自己評価・部長評価フォームの回答: B列が名前、C列以降が回答
+  // 自己評価・部長評価フォームの回答: B列が名前、D列〜CF列が回答（2行目からデータ）
   if (type === 'selfEvaluation' || type === 'managerEvaluation') {
     const result = {}
     // ヘッダー行(row 0)をスキップ、row 1から処理
     rawData.slice(1).forEach((row, idx) => {
       const name = String(row[1] || '').trim() // B列 = index 1
       if (name && name !== '氏名' && name !== '名前') {
+        // D列(index 3)からCF列までが回答データ
+        const answers = row.slice(3)
         result[name] = {
           name: name,
-          answers: row.slice(2) // C列以降が回答
+          answers: answers
         }
         if (idx < 3) {
-          console.log(`[convertToStructuredData] ${type}: ${name}, answers count: ${row.slice(2).length}`)
+          console.log(`[convertToStructuredData] ${type}: ${name}, answers count: ${answers.length}, first 5:`, answers.slice(0, 5))
         }
       }
     })

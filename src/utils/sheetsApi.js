@@ -142,17 +142,52 @@ export const getEvaluationDataFromStorage = () => {
  * 評価文字列を数値に変換
  */
 export const convertEvaluationToNumber = (evaluation) => {
-  const mapping = {
+  if (!evaluation) return 0
+
+  const evalStr = String(evaluation).trim()
+
+  // 英字評価 (S/A/B/C/D)
+  const letterMapping = {
     'S': 5,
     'A': 4,
     'B': 3,
     'C': 2,
-    'D': 1,
-    '': 0,
-    null: 0,
-    undefined: 0
+    'D': 1
   }
-  return mapping[evaluation] !== undefined ? mapping[evaluation] : 0
+
+  if (letterMapping[evalStr] !== undefined) {
+    return letterMapping[evalStr]
+  }
+
+  // 日本語評価（5段階）
+  // 出来ている系
+  if (evalStr.includes('出来ていた') || evalStr.includes('出来ている') || evalStr.includes('できていた') || evalStr.includes('できている')) {
+    if (evalStr.includes('やや') || evalStr.includes('少し')) {
+      return 4 // やや出来ていた
+    }
+    return 5 // 出来ていた
+  }
+
+  // 出来ていない系
+  if (evalStr.includes('出来ていな') || evalStr.includes('出来てな') || evalStr.includes('できていな') || evalStr.includes('できてな')) {
+    if (evalStr.includes('やや') || evalStr.includes('少し') || evalStr.includes('あまり')) {
+      return 2 // やや出来ていなかった
+    }
+    return 1 // 出来ていなかった
+  }
+
+  // 普通・どちらとも
+  if (evalStr.includes('普通') || evalStr.includes('どちらとも')) {
+    return 3
+  }
+
+  // 数値がそのまま入っている場合
+  const num = parseFloat(evalStr)
+  if (!isNaN(num) && num >= 1 && num <= 5) {
+    return num
+  }
+
+  return 0
 }
 
 /**

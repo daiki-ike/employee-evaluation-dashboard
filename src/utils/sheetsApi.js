@@ -161,41 +161,106 @@ export const convertEvaluationToNumber = (evaluation) => {
 export const convertToStructuredData = (rawData, type) => {
   if (!rawData || rawData.length === 0) return []
 
-  if (type === 'master') {
-    return rawData.slice(1).map(row => ({
-      id: row[0],
-      name: row[1],
-      department: row[2],
-      position: row[3],
-      role: row[4]
+  console.log(`[convertToStructuredData] type=${type}, rows=${rawData.length}`)
+  if (rawData.length > 0) {
+    console.log(`[convertToStructuredData] First row sample:`, rawData[0]?.slice(0, 5))
+  }
+
+  // 評価マスター: 設問定義
+  if (type === 'master' || type === 'evaluationMaster') {
+    return rawData.slice(1).map((row, idx) => ({
+      questionNo: idx + 1,
+      categoryNo: row[0],
+      majorCategory: row[1],
+      majorCategoryDesc: row[2],
+      minorCategory: row[3],
+      criteria: row[4]
     }))
   }
 
-  if (type === 'evaluation') {
-    return rawData
+  // 自己評価・部長評価フォームの回答: B列が名前、C列以降が回答
+  if (type === 'selfEvaluation' || type === 'managerEvaluation') {
+    const result = {}
+    // ヘッダー行(row 0)をスキップ、row 1から処理
+    rawData.slice(1).forEach((row, idx) => {
+      const name = String(row[1] || '').trim() // B列 = index 1
+      if (name && name !== '氏名' && name !== '名前') {
+        result[name] = {
+          name: name,
+          answers: row.slice(2) // C列以降が回答
+        }
+        if (idx < 3) {
+          console.log(`[convertToStructuredData] ${type}: ${name}, answers count: ${row.slice(2).length}`)
+        }
+      }
+    })
+    console.log(`[convertToStructuredData] ${type}: ${Object.keys(result).length} employees`)
+    return result
+  }
+
+  // 合計評点: B列が名前、特定列が評点
+  if (type === 'totalScore') {
+    const result = {}
+    rawData.slice(1).forEach((row, idx) => {
+      const name = String(row[1] || '').trim() // B列 = index 1
+      // 合計評点は最後の方の列にあることが多い
+      // まずは全行をログして確認
+      if (idx < 3) {
+        console.log(`[convertToStructuredData] totalScore row ${idx}: name=${name}, cols=${row.length}`)
+      }
+      if (name && name !== '氏名' && name !== '名前') {
+        // 評点を探す（数値が入っている最後の列を探す）
+        let score = 0
+        for (let i = row.length - 1; i >= 2; i--) {
+          const val = parseFloat(row[i])
+          if (!isNaN(val) && val > 0 && val < 1000) {
+            score = val
+            break
+          }
+        }
+        result[name] = score
+      }
+    })
+    console.log(`[convertToStructuredData] totalScore: ${Object.keys(result).length} employees`)
+    return result
   }
 
   return rawData
 }
 
 /**
- * 評価データをマージ
+ * 評価データをマージ（4つのデータソースを統合）
  */
-export const mergeEvaluationData = (existingData, newData) => {
-  if (!existingData || existingData.length === 0) return newData
-  if (!newData || newData.length === 0) return existingData
+export const mergeEvaluationData = (masterData, selfData, managerData, scoreData) => {
+  console.log('[mergeEvaluationData] Starting merge...')
+  console.log('[mergeEvaluationData] selfData keys:', Object.keys(selfData || {}).slice(0, 5))
+  console.log('[mergeEvaluationData] managerData keys:', Object.keys(managerData || {}).slice(0, 5))
+  console.log('[mergeEvaluationData] scoreData keys:', Object.keys(scoreData || {}).slice(0, 5))
 
-  // 新しいデータで既存データを上書き
-  const merged = [...existingData]
+  // 全社員名を収集
+  const allNames = new Set([
+    ...Object.keys(selfData || {}),
+    ...Object.keys(managerData || {}),
+    ...Object.keys(scoreData || {})
+  ])
 
-  newData.forEach(newRow => {
-    const existingIndex = merged.findIndex(row => row[0] === newRow[0])
-    if (existingIndex >= 0) {
-      merged[existingIndex] = newRow
-    } else {
-      merged.push(newRow)
+  console.log('[mergeEvaluationData] All employee names:', [...allNames].slice(0, 10))
+
+  const result = {}
+
+  allNames.forEach(name => {
+    if (!name || name === '氏名' || name === '名前') return
+
+    result[name] = {
+      name: name,
+      department: '', // マスターから取得する場合は別途対応
+      selfAnswers: selfData?.[name]?.answers || [],
+      managerAnswers: managerData?.[name]?.answers || [],
+      totalScore: scoreData?.[name] || 0
     }
   })
 
-  return merged
+  console.log('[mergeEvaluationData] Result:', Object.keys(result).length, 'employees')
+
+  return result
 }

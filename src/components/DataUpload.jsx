@@ -16,7 +16,7 @@ const DataUpload = ({ onUpload }) => {
 
   // 自己評価フォーム
   const [selfEvalUrl, setSelfEvalUrl] = useState('https://docs.google.com/spreadsheets/d/1Dgk5tzbb1ugMwO9Aj14TsSmHlgXeFR1ixZtb1jVRDc8/')
-  const [selfEvalSheetName, setSelfEvalSheetName] = useState('フォームの回答1')
+  const [selfEvalSheetName, setSelfEvalSheetName] = useState('フォームの回答 1')
 
   // 部長評価フォーム
   const [managerEvalUrl, setManagerEvalUrl] = useState('https://docs.google.com/spreadsheets/d/1Dgk5tzbb1ugMwO9Aj14TsSmHlgXeFR1ixZtb1jVRDc8/')

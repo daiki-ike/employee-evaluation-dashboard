@@ -167,15 +167,34 @@ export const convertToStructuredData = (rawData, type) => {
   }
 
   // 評価マスター: 設問定義
+  // A列: カテゴリー番号, B列: 設問番号, C列: 大項目, D列: 評価方法, E列: 中項目, F列: 審査内容
   if (type === 'master' || type === 'evaluationMaster') {
-    return rawData.slice(1).map((row, idx) => ({
-      questionNo: idx + 1,
-      categoryNo: row[0],
-      majorCategory: row[1],
-      majorCategoryDesc: row[2],
-      minorCategory: row[3],
-      criteria: row[4]
-    }))
+    const result = []
+    rawData.slice(1).forEach((row, idx) => {
+      // 設問番号がある行のみ処理（ヘッダー行や空行をスキップ）
+      const questionNo = parseInt(row[1])
+      if (!isNaN(questionNo) && questionNo > 0) {
+        result.push({
+          questionNo: questionNo,           // B列: 設問番号
+          categoryNo: row[0],               // A列: カテゴリー番号
+          majorCategory: String(row[2] || '').trim(),  // C列: 大項目
+          majorCategoryDesc: String(row[3] || '').trim(), // D列: 評価方法
+          minorCategory: String(row[4] || '').trim(),  // E列: 中項目
+          criteria: String(row[5] || '').trim()        // F列: 審査内容
+        })
+        if (result.length <= 3) {
+          console.log(`[convertToStructuredData] Master row ${result.length}:`, {
+            questionNo,
+            categoryNo: row[0],
+            majorCategory: row[2],
+            minorCategory: row[4],
+            criteria: row[5]?.substring(0, 30)
+          })
+        }
+      }
+    })
+    console.log(`[convertToStructuredData] evaluationMaster: ${result.length} questions`)
+    return result
   }
 
   // 自己評価・部長評価フォームの回答: B列が名前、C列以降が回答

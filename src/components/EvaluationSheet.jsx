@@ -97,6 +97,13 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
     if (!employeeEvaluation) return null
 
     const evaluations = employeeEvaluation.evaluations
+    if (!evaluations || evaluations.length === 0) {
+      return {
+        avgDifference: '0.00',
+        maxDifference: '0.00',
+        questionCount: 0
+      }
+    }
     const avgDifference = evaluations.reduce((sum, item) => sum + Math.abs(item.difference), 0) / evaluations.length
     const maxDifference = Math.max(...evaluations.map(item => Math.abs(item.difference)))
 
@@ -231,7 +238,7 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
             </div>
             <div className="total-score">
               <span className="score-label">合計評価点</span>
-              <span className="score-value">{employeeEvaluation.totalScore.toFixed(2)}</span>
+              <span className="score-value">{(employeeEvaluation.totalScore || 0).toFixed(2)}</span>
             </div>
           </div>
 

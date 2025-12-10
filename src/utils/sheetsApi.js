@@ -236,19 +236,21 @@ export const convertToStructuredData = (rawData, type) => {
     return result
   }
 
-  // 自己評価・部長評価フォームの回答: B列が名前、C列以降が回答
+  // 自己評価・部長評価フォームの回答: B列が名前、D列〜CF列が回答（2行目からデータ）
   if (type === 'selfEvaluation' || type === 'managerEvaluation') {
     const result = {}
     // ヘッダー行(row 0)をスキップ、row 1から処理
     rawData.slice(1).forEach((row, idx) => {
       const name = String(row[1] || '').trim() // B列 = index 1
       if (name && name !== '氏名' && name !== '名前') {
+        // D列(index 3)からCF列までが回答データ
+        const answers = row.slice(3)
         result[name] = {
           name: name,
-          answers: row.slice(2) // C列以降が回答
+          answers: answers
         }
         if (idx < 3) {
-          console.log(`[convertToStructuredData] ${type}: ${name}, answers count: ${row.slice(2).length}`)
+          console.log(`[convertToStructuredData] ${type}: ${name}, answers count: ${answers.length}, first 5:`, answers.slice(0, 5))
         }
       }
     })

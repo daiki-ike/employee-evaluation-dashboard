@@ -170,30 +170,64 @@ export const convertToStructuredData = (rawData, type) => {
   // A列: カテゴリー番号, B列: 設問番号, C列: 大項目, D列: 評価方法, E列: 中項目, F列: 審査内容
   if (type === 'master' || type === 'evaluationMaster') {
     const result = []
-    rawData.slice(1).forEach((row, idx) => {
-      // 設問番号がある行のみ処理（ヘッダー行や空行をスキップ）
-      const questionNo = parseInt(row[1])
-      if (!isNaN(questionNo) && questionNo > 0) {
+    let skippedCount = 0
+
+    // 最初の10行の詳細をログ
+    console.log('[convertToStructuredData] === First 10 rows detail ===')
+    for (let i = 0; i < Math.min(10, rawData.length); i++) {
+      const row = rawData[i]
+      console.log(`  Row ${i}: cols=${row?.length}, [0]=${row?.[0]}, [1]=${row?.[1]}, [2]=${String(row?.[2] || '').substring(0, 20)}, [5]=${String(row?.[5] || '').substring(0, 20)}`)
+    }
+
+    rawData.forEach((row, idx) => {
+      if (!row) {
+        skippedCount++
+        return
+      }
+
+      // 設問番号をB列から取得、なければ連番を使用
+      let questionNo = parseInt(row[1])
+      if (isNaN(questionNo) || questionNo <= 0) {
+        // B列が空の場合、A列のカテゴリ番号とインデックスから推測
+        // または単純に連番を振る
+        questionNo = result.length + 1
+      }
+
+      // 審査内容を取得（F列 = index 5）
+      const criteria = String(row[5] || '').trim()
+
+      // 審査内容が空でも、大項目または中項目があれば処理
+      const majorCategory = String(row[2] || '').trim()
+      const minorCategory = String(row[4] || '').trim()
+
+      // 何かしらのデータがある行のみ処理（完全に空の行やヘッダーをスキップ）
+      const hasData = criteria || majorCategory || minorCategory
+      const isHeader = String(row[0] || '').includes('カテゴリ') || String(row[1] || '').includes('設問')
+
+      if (hasData && !isHeader) {
         result.push({
-          questionNo: questionNo,           // B列: 設問番号
-          categoryNo: row[0],               // A列: カテゴリー番号
-          majorCategory: String(row[2] || '').trim(),  // C列: 大項目
-          majorCategoryDesc: String(row[3] || '').trim(), // D列: 評価方法
-          minorCategory: String(row[4] || '').trim(),  // E列: 中項目
-          criteria: String(row[5] || '').trim()        // F列: 審査内容
+          questionNo: questionNo,
+          categoryNo: row[0],
+          majorCategory: majorCategory,
+          majorCategoryDesc: String(row[3] || '').trim(),
+          minorCategory: minorCategory,
+          criteria: criteria
         })
-        if (result.length <= 3) {
-          console.log(`[convertToStructuredData] Master row ${result.length}:`, {
+
+        if (result.length <= 5) {
+          console.log(`[convertToStructuredData] Master Q${result.length}:`, {
             questionNo,
             categoryNo: row[0],
-            majorCategory: row[2],
-            minorCategory: row[4],
-            criteria: row[5]?.substring(0, 30)
+            majorCategory: majorCategory.substring(0, 15),
+            criteria: criteria.substring(0, 30)
           })
         }
+      } else {
+        skippedCount++
       }
     })
-    console.log(`[convertToStructuredData] evaluationMaster: ${result.length} questions`)
+
+    console.log(`[convertToStructuredData] evaluationMaster: ${result.length} questions, ${skippedCount} skipped`)
     return result
   }
 

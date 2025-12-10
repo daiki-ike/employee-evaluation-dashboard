@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchSheetData, convertToStructuredData, mergeEvaluationData } from '../utils/sheetsApi'
 import { fetchAllSalesSheets } from '../utils/salesApi'
@@ -28,6 +28,11 @@ const DataUpload = ({ onUpload }) => {
 
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+
+  // ページ読み込み時にメッセージをクリア
+  useEffect(() => {
+    setMessage('')
+  }, [])
 
   // localStorage からデータ件数を取得する関数
   const getSalesCount = () => {
@@ -108,24 +113,51 @@ const DataUpload = ({ onUpload }) => {
     setMessage('')
 
     try {
-      const [masterRaw, selfRaw, managerRaw, scoreRaw] = await Promise.all([
+      // 各シートを個別に取得（1つが失敗しても他は続行）
+      const results = await Promise.allSettled([
         fetchSheetData(masterUrl, masterSheetName),
         fetchSheetData(selfEvalUrl, selfEvalSheetName),
         fetchSheetData(managerEvalUrl, managerEvalSheetName),
         fetchSheetData(totalScoreUrl, totalScoreSheetName)
       ])
 
+      const sheetNames = ['評価マスター', '自己評価', '部長評価', '合計評点']
+      const errors = []
+      const successData = []
+
+      results.forEach((result, idx) => {
+        if (result.status === 'fulfilled') {
+          successData[idx] = result.value
+          console.log(`[handleUploadEvaluation] ${sheetNames[idx]}: ${result.value.length} rows`)
+        } else {
+          errors.push(`${sheetNames[idx]}: ${result.reason.message}`)
+          successData[idx] = []
+          console.error(`[handleUploadEvaluation] ${sheetNames[idx]} failed:`, result.reason)
+        }
+      })
+
+      const [masterRaw, selfRaw, managerRaw, scoreRaw] = successData
+
       const masterData = convertToStructuredData(masterRaw, 'evaluationMaster')
       const selfData = convertToStructuredData(selfRaw, 'selfEvaluation')
       const managerData = convertToStructuredData(managerRaw, 'managerEvaluation')
       const scoreData = convertToStructuredData(scoreRaw, 'totalScore')
+
+      console.log('[handleUploadEvaluation] masterData:', masterData.length, 'questions')
+      console.log('[handleUploadEvaluation] selfData:', Object.keys(selfData).length, 'employees')
+      console.log('[handleUploadEvaluation] managerData:', Object.keys(managerData).length, 'employees')
+      console.log('[handleUploadEvaluation] scoreData:', Object.keys(scoreData).length, 'employees')
 
       const mergedData = mergeEvaluationData(masterData, selfData, managerData, scoreData)
 
       onUpload('evaluationMaster', masterData)
       onUpload('evaluationData', mergedData)
 
-      setMessage('✅ 評価データを読み込みました（4シート統合完了）')
+      if (errors.length > 0) {
+        setMessage(`⚠️ 一部読み込み失敗:\n${errors.join('\n')}\n\n成功: マスター${masterData.length}問, 社員${Object.keys(mergedData).length}名`)
+      } else {
+        setMessage(`✅ 評価データ読み込み完了: マスター${masterData.length}問, 社員${Object.keys(mergedData).length}名`)
+      }
     } catch (error) {
       setMessage(`❌ エラー: ${error.message}`)
       console.error('Evaluation upload error:', error)

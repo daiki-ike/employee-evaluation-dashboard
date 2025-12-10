@@ -193,18 +193,19 @@ export const convertToStructuredData = (rawData, type) => {
         questionNo = result.length + 1
       }
 
-      // 審査内容を取得（F列 = index 5）
+      // 審査内容を取得（F列 = index 5）- これが設問のテキスト
       const criteria = String(row[5] || '').trim()
-
-      // 審査内容が空でも、大項目または中項目があれば処理
       const majorCategory = String(row[2] || '').trim()
       const minorCategory = String(row[4] || '').trim()
 
-      // 何かしらのデータがある行のみ処理（完全に空の行やヘッダーをスキップ）
-      const hasData = criteria || majorCategory || minorCategory
-      const isHeader = String(row[0] || '').includes('カテゴリ') || String(row[1] || '').includes('設問')
+      // ヘッダー行チェック
+      const isHeader = String(row[0] || '').includes('カテゴリ') ||
+                       String(row[1] || '').includes('設問') ||
+                       String(row[2] || '').includes('大項目')
 
-      if (hasData && !isHeader) {
+      // 審査内容(criteria)がある行のみを有効な設問として処理
+      // criteriaが空の行はカテゴリ見出し行の可能性が高い
+      if (criteria && !isHeader) {
         result.push({
           questionNo: questionNo,
           categoryNo: row[0],
@@ -224,10 +225,14 @@ export const convertToStructuredData = (rawData, type) => {
         }
       } else {
         skippedCount++
+        // 最初の5件のスキップされた行をログ（デバッグ用）
+        if (skippedCount <= 5) {
+          console.log(`[convertToStructuredData] Skipped row ${idx}: criteria="${criteria.substring(0, 20)}", isHeader=${isHeader}`)
+        }
       }
     })
 
-    console.log(`[convertToStructuredData] evaluationMaster: ${result.length} questions, ${skippedCount} skipped`)
+    console.log(`[convertToStructuredData] evaluationMaster: ${result.length} questions extracted, ${skippedCount} rows skipped`)
     return result
   }
 

@@ -261,26 +261,30 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
             <div className="legend-item">
               <h4>比較グラフの見方</h4>
               <div className="legend-row">
-                <span className="color-box self"></span>
+                <span className="legend-marker self">●</span>
                 <span>自己評価</span>
               </div>
               <div className="legend-row">
-                <span className="color-box manager"></span>
+                <span className="legend-marker manager">▲</span>
                 <span>部長評価</span>
+              </div>
+              <div className="legend-row">
+                <span className="legend-marker match">◆</span>
+                <span>一致</span>
               </div>
             </div>
             <div className="legend-item">
               <h4>乖離の意味</h4>
               <div className="legend-desc">
-                <span className="diff-example positive">+0.70</span>
+                <span className="diff-example positive">+2.0</span>
                 <span>自己評価の方が高い（自己評価過大の可能性）</span>
               </div>
               <div className="legend-desc">
-                <span className="diff-example negative">-0.70</span>
+                <span className="diff-example negative">-2.0</span>
                 <span>部長評価の方が高い（自己評価過小の可能性）</span>
               </div>
               <div className="legend-desc">
-                <span className="diff-example zero">0.00</span>
+                <span className="diff-example zero">0.0</span>
                 <span>自己評価と部長評価が一致</span>
               </div>
             </div>
@@ -337,17 +341,45 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
                       </span>
                     </td>
                     <td className="chart-cell">
-                      <div className="mini-chart">
-                        <div
-                          className="bar self"
-                          style={{ width: `${item.selfNumeric * 100}%` }}
-                          title={`自己: ${item.selfNumeric}`}
-                        ></div>
-                        <div
-                          className="bar manager"
-                          style={{ width: `${item.managerNumeric * 100}%` }}
-                          title={`部長: ${item.managerNumeric}`}
-                        ></div>
+                      <div className="scale-chart">
+                        {/* スケールライン 1-5 */}
+                        <div className="scale-line">
+                          {[1, 2, 3, 4, 5].map(n => (
+                            <div key={n} className="scale-tick" style={{ left: `${(n - 1) * 25}%` }}>
+                              <span className="tick-label">{n}</span>
+                            </div>
+                          ))}
+                        </div>
+                        {/* マーカー表示 */}
+                        {item.selfNumeric === item.managerNumeric ? (
+                          // 一致: ダイヤモンドマーカー
+                          <div
+                            className="marker match"
+                            style={{ left: `${(item.selfNumeric - 1) * 25}%` }}
+                            title={`一致: ${item.selfNumeric}`}
+                          >◆</div>
+                        ) : (
+                          // 乖離あり: 2つのマーカーを線で結ぶ
+                          <>
+                            <div
+                              className="gap-line"
+                              style={{
+                                left: `${(Math.min(item.selfNumeric, item.managerNumeric) - 1) * 25}%`,
+                                width: `${Math.abs(item.selfNumeric - item.managerNumeric) * 25}%`
+                              }}
+                            />
+                            <div
+                              className="marker self"
+                              style={{ left: `${(item.selfNumeric - 1) * 25}%` }}
+                              title={`自己: ${item.selfNumeric}`}
+                            >●</div>
+                            <div
+                              className="marker manager"
+                              style={{ left: `${(item.managerNumeric - 1) * 25}%` }}
+                              title={`部長: ${item.managerNumeric}`}
+                            >▲</div>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

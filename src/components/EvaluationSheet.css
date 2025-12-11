@@ -91,6 +91,16 @@
   box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
 }
 
+.no-employees-message {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #FFF5F5;
+  border: 1px solid #FED7D7;
+  border-radius: 8px;
+  color: #C53030;
+  font-size: 0.9rem;
+}
+
 /* Employee Header Info */
 .employee-header {
   display: flex;
@@ -374,25 +384,18 @@
 }
 
 .score-text {
-  font-size: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: keep-all;
   color: var(--text-secondary);
   margin-bottom: 4px;
   min-height: 1.2em;
-  /* Prevent layout shift */
 }
 
 .score-num {
   font-weight: 700;
   font-size: 1.1rem;
-}
-
-.score-text {
-  font-size: 0.9rem;
-  line-height: 1.4;
-  white-space: normal;
-  word-break: keep-all;
-  /* Try to keep words together */
-  margin-bottom: 4px;
 }
 
 /* Difference Badge */

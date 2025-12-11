@@ -341,46 +341,55 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
                       </span>
                     </td>
                     <td className="chart-cell">
-                      <div className="scale-chart">
-                        {/* スケールライン 1-5 */}
-                        <div className="scale-line">
-                          {[1, 2, 3, 4, 5].map(n => (
-                            <div key={n} className="scale-tick" style={{ left: `${(n - 1) * 25}%` }}>
-                              <span className="tick-label">{n}</span>
+                      {(() => {
+                        // 0の場合は1として表示（スケール外にならないよう）
+                        const selfPos = Math.max(1, Math.min(5, item.selfNumeric))
+                        const mgrPos = Math.max(1, Math.min(5, item.managerNumeric))
+                        const selfLeft = (selfPos - 1) * 25
+                        const mgrLeft = (mgrPos - 1) * 25
+                        const minLeft = Math.min(selfLeft, mgrLeft)
+                        const gapWidth = Math.abs(selfLeft - mgrLeft)
+
+                        return (
+                          <div className="scale-chart">
+                            {/* スケールライン 1-5 */}
+                            <div className="scale-line">
+                              {[1, 2, 3, 4, 5].map(n => (
+                                <div key={n} className="scale-tick" style={{ left: `${(n - 1) * 25}%` }}>
+                                  <span className="tick-label">{n}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
-                        {/* マーカー表示 */}
-                        {item.selfNumeric === item.managerNumeric ? (
-                          // 一致: ダイヤモンドマーカー
-                          <div
-                            className="marker match"
-                            style={{ left: `${(item.selfNumeric - 1) * 25}%` }}
-                            title={`一致: ${item.selfNumeric}`}
-                          >◆</div>
-                        ) : (
-                          // 乖離あり: 2つのマーカーを線で結ぶ
-                          <>
-                            <div
-                              className="gap-line"
-                              style={{
-                                left: `${(Math.min(item.selfNumeric, item.managerNumeric) - 1) * 25}%`,
-                                width: `${Math.abs(item.selfNumeric - item.managerNumeric) * 25}%`
-                              }}
-                            />
-                            <div
-                              className="marker self"
-                              style={{ left: `${(item.selfNumeric - 1) * 25}%` }}
-                              title={`自己: ${item.selfNumeric}`}
-                            >●</div>
-                            <div
-                              className="marker manager"
-                              style={{ left: `${(item.managerNumeric - 1) * 25}%` }}
-                              title={`部長: ${item.managerNumeric}`}
-                            >▲</div>
-                          </>
-                        )}
-                      </div>
+                            {/* マーカー表示 */}
+                            {selfPos === mgrPos ? (
+                              // 一致: ダイヤモンドマーカー
+                              <div
+                                className="marker match"
+                                style={{ left: `${selfLeft}%` }}
+                                title={`一致: ${item.selfNumeric}`}
+                              >◆</div>
+                            ) : (
+                              // 乖離あり: 2つのマーカーを線で結ぶ
+                              <>
+                                <div
+                                  className="gap-line"
+                                  style={{ left: `${minLeft}%`, width: `${gapWidth}%` }}
+                                />
+                                <div
+                                  className="marker self"
+                                  style={{ left: `${selfLeft}%` }}
+                                  title={`自己: ${item.selfNumeric}`}
+                                >●</div>
+                                <div
+                                  className="marker manager"
+                                  style={{ left: `${mgrLeft}%` }}
+                                  title={`部長: ${item.managerNumeric}`}
+                                >▲</div>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </td>
                   </tr>
                 ))}

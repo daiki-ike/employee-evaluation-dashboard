@@ -27,12 +27,25 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
 
     Object.values(evaluationData).forEach(emp => {
       if (!emp.department) return
-      // 名古屋支社の場合は「名古屋支社」を含む全部署
+
+      // 特殊ケース: 名古屋支社は「名古屋支社」を含む全部署
       if (userDepts.some(d => d === '名古屋支社' && emp.department.includes('名古屋支社'))) {
         matchedDepts.add(emp.department)
+        return
       }
-      // それ以外は完全一致またはプレフィックス一致
-      else if (userDepts.some(d => emp.department === d || emp.department.startsWith(d))) {
+
+      // 特殊ケース: 経理部は「経理部」を含む全部署（本社・支社問わず）
+      if (userDepts.some(d => d === '経理部' && emp.department.includes('経理部'))) {
+        matchedDepts.add(emp.department)
+        return
+      }
+
+      // 通常ケース: 完全一致、プレフィックス一致、または部署名を含む
+      if (userDepts.some(d =>
+        emp.department === d ||
+        emp.department.startsWith(d) ||
+        emp.department.includes(d)
+      )) {
         matchedDepts.add(emp.department)
       }
     })

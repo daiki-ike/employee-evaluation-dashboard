@@ -15,6 +15,7 @@ const Dashboard = ({ user, salesRanking }) => {
   // ユーザーのアクセス可能なタブを取得
   const accessibleTab = user.salesAccess?.tab || 'all'
   const shouldFilterDept = user.salesAccess?.filterDept || false
+  const deptKey = user.salesAccess?.deptKey || null
 
   const [selectedTab, setSelectedTab] = useState(() => {
     // 部長の場合、アクセス可能なタブをデフォルトに
@@ -45,19 +46,26 @@ const Dashboard = ({ user, salesRanking }) => {
       const data = rankingData[accessibleTab]
       if (!data) return null
 
-      // 部署フィルタが必要な場合
-      if (shouldFilterDept && user.departments) {
-        // departmentsをフィルタ（該当部署のみ表示）
+      // 部署フィルタが必要な場合（deptKeyを使用）
+      if (shouldFilterDept && deptKey) {
+        // departmentsをフィルタ（deptKeyに一致する部署のみ表示）
         if (data.departments) {
           const filteredDepts = data.departments.filter(dept =>
-            user.departments.some(userDept =>
-              dept.name === userDept || dept.name.includes(userDept)
-            )
+            // deptKeyと部署名の照合（例: 'マネジメント' と 'マネジメント'）
+            dept.name === deptKey ||
+            dept.name.includes(deptKey) ||
+            deptKey.includes(dept.name)
+          )
+          // teamSummaryも同様にフィルタ
+          const filteredTeamSummary = data.teamSummary.filter(team =>
+            team.team === deptKey ||
+            team.team.includes(deptKey) ||
+            deptKey.includes(team.team)
           )
           return {
             ...data,
             departments: filteredDepts,
-            teamSummary: data.teamSummary // チームサマリーはそのまま
+            teamSummary: filteredTeamSummary.length > 0 ? filteredTeamSummary : data.teamSummary
           }
         }
       }
@@ -212,7 +220,7 @@ const Dashboard = ({ user, salesRanking }) => {
             {accessibleTab === 'osaka' && '大阪'}
             {accessibleTab === 'nagoya' && '名古屋'}
             {accessibleTab === 'kikakukaihatsu' && '企画開発'}
-            {shouldFilterDept && ` (${user.departments?.join(', ')})`}
+            {shouldFilterDept && deptKey && ` (${deptKey})`}
           </span>
         </div>
       )}

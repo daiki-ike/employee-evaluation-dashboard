@@ -12,22 +12,22 @@ const Login = ({ onLogin }) => {
     manager1: {
       role: 'manager',
       departments: ['東京本社 マネジメント部'],
-      salesAccess: { tab: 'tokyo', filterDept: true }
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: 'マネジメント' }
     },
     manager2: {
       role: 'manager',
       departments: ['東京本社 制作1部'],
-      salesAccess: { tab: 'tokyo', filterDept: true }
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: '制作1' }
     },
     manager3: {
       role: 'manager',
       departments: ['東京本社 制作2部'],
-      salesAccess: { tab: 'tokyo', filterDept: true }
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: '制作2' }
     },
     manager4: {
       role: 'manager',
       departments: ['東京本社 制作3部'],
-      salesAccess: { tab: 'tokyo', filterDept: true }
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: '制作3' }
     },
     manager5: {
       role: 'manager',

@@ -1,16 +1,75 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { convertEvaluationToNumber } from '../utils/sheetsApi'
 import './EvaluationSheet.css'
 
 const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
+  const [selectedDepartment, setSelectedDepartment] = useState('')
   const [selectedEmployee, setSelectedEmployee] = useState('')
 
-  // 社員リストを取得（evaluationDataのキーから）
-  const employees = useMemo(() => {
+  // ユーザーがアクセス可能な部署リストを取得
+  const accessibleDepartments = useMemo(() => {
+    if (!evaluationData || !user) return []
+
+    // 全社アクセス権限がある場合
+    if (user.departments?.includes('全社') || user.role === 'president' || user.role === 'admin') {
+      // 全社員の部署をユニークに取得
+      const allDepts = new Set()
+      Object.values(evaluationData).forEach(emp => {
+        if (emp.department) allDepts.add(emp.department)
+      })
+      return [...allDepts].sort()
+    }
+
+    // 部長の場合、自分の担当部署のみ
+    const userDepts = user.departments || []
+    const matchedDepts = new Set()
+
+    Object.values(evaluationData).forEach(emp => {
+      if (!emp.department) return
+      // 名古屋支社の場合は「名古屋支社」を含む全部署
+      if (userDepts.some(d => d === '名古屋支社' && emp.department.includes('名古屋支社'))) {
+        matchedDepts.add(emp.department)
+      }
+      // それ以外は完全一致またはプレフィックス一致
+      else if (userDepts.some(d => emp.department === d || emp.department.startsWith(d))) {
+        matchedDepts.add(emp.department)
+      }
+    })
+
+    return [...matchedDepts].sort()
+  }, [evaluationData, user])
+
+  // 選択可能な社員リスト（部署フィルタ適用）
+  const filteredEmployees = useMemo(() => {
     if (!evaluationData) return []
-    return Object.keys(evaluationData).sort()
-  }, [evaluationData])
+
+    let employees = Object.values(evaluationData)
+
+    // 部署でフィルタ
+    if (selectedDepartment) {
+      employees = employees.filter(emp => emp.department === selectedDepartment)
+    } else if (user.role === 'manager' && !user.departments?.includes('全社')) {
+      // 部署未選択時でも、アクセス可能な部署の社員のみ
+      employees = employees.filter(emp =>
+        accessibleDepartments.includes(emp.department)
+      )
+    }
+
+    return employees.map(emp => emp.name).sort()
+  }, [evaluationData, selectedDepartment, user, accessibleDepartments])
+
+  // 部署選択時に社員選択をリセット
+  useEffect(() => {
+    setSelectedEmployee('')
+  }, [selectedDepartment])
+
+  // 初回ロード時に最初の部署を選択（部長の場合）
+  useEffect(() => {
+    if (accessibleDepartments.length > 0 && !selectedDepartment && user.role === 'manager') {
+      setSelectedDepartment(accessibleDepartments[0])
+    }
+  }, [accessibleDepartments, selectedDepartment, user])
 
   // 選択された社員の評価データを整形（rowspan計算付き）
   const employeeEvaluation = useMemo(() => {
@@ -208,17 +267,37 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
       </header>
 
       <div className="employee-selector">
-        <label>社員を選択</label>
-        <select
-          value={selectedEmployee}
-          onChange={(e) => setSelectedEmployee(e.target.value)}
-          className="employee-select"
-        >
-          <option value="">-- 社員を選択してください --</option>
-          {Object.keys(evaluationData).map(name => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
+        <div className="selector-group">
+          <label>部署を選択</label>
+          <select
+            value={selectedDepartment}
+            onChange={(e) => setSelectedDepartment(e.target.value)}
+            className="department-select"
+          >
+            {accessibleDepartments.length > 1 && (
+              <option value="">-- 全部署 --</option>
+            )}
+            {accessibleDepartments.map(dept => (
+              <option key={dept} value={dept}>{dept}</option>
+            ))}
+          </select>
+        </div>
+        <div className="selector-group">
+          <label>社員を選択</label>
+          <select
+            value={selectedEmployee}
+            onChange={(e) => setSelectedEmployee(e.target.value)}
+            className="employee-select"
+          >
+            <option value="">-- 社員を選択してください --</option>
+            {filteredEmployees.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="selector-info">
+          <span>{filteredEmployees.length}名</span>
+        </div>
       </div>
 
       {!selectedEmployee ? (

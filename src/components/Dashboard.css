@@ -68,6 +68,18 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
+/* 部長用タブ表示 */
+.tab-navigation.manager-tab {
+  background: #667eea;
+  color: white;
+}
+
+.current-tab-label {
+  padding: 10px 20px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
 /* サマリーカード */
 .summary-cards {
   display: grid;

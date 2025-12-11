@@ -160,20 +160,24 @@ export const convertEvaluationToNumber = (evaluation) => {
   }
 
   // 日本語評価（5段階）
-  // 出来ている系
-  if (evalStr.includes('出来ていた') || evalStr.includes('出来ている') || evalStr.includes('できていた') || evalStr.includes('できている')) {
+  // 出来ている系 (5 or 4)
+  if (evalStr.includes('出来ていた') || evalStr.includes('出来ている') ||
+      evalStr.includes('できていた') || evalStr.includes('できている')) {
     if (evalStr.includes('やや') || evalStr.includes('少し')) {
       return 4 // やや出来ていた
     }
     return 5 // 出来ていた
   }
 
-  // 出来ていない系
-  if (evalStr.includes('出来ていな') || evalStr.includes('出来てな') || evalStr.includes('できていな') || evalStr.includes('できてな')) {
+  // 出来ていない系 (1 or 2) - より多くのパターンに対応
+  if (evalStr.includes('出来ていな') || evalStr.includes('出来てな') ||
+      evalStr.includes('できていな') || evalStr.includes('できてな') ||
+      evalStr.includes('出来なかった') || evalStr.includes('できなかった') ||
+      evalStr.includes('出来ない') || evalStr.includes('できない')) {
     if (evalStr.includes('やや') || evalStr.includes('少し') || evalStr.includes('あまり')) {
       return 2 // やや出来ていなかった
     }
-    return 1 // 出来ていなかった
+    return 1 // 出来ていなかった / 出来なかった
   }
 
   // 普通・どちらとも
@@ -185,6 +189,11 @@ export const convertEvaluationToNumber = (evaluation) => {
   const num = parseFloat(evalStr)
   if (!isNaN(num) && num >= 1 && num <= 5) {
     return num
+  }
+
+  // 認識できない場合はログ出力（デバッグ用）
+  if (evalStr.length > 0) {
+    console.log(`[convertEvaluationToNumber] Unknown evaluation: "${evalStr}"`)
   }
 
   return 0

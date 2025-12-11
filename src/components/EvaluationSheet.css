@@ -48,16 +48,30 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid var(--border-color);
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
 }
 
-.employee-selector label {
+.selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selector-group label {
   font-weight: 600;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
+.selector-info {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  padding-bottom: 10px;
+}
+
+.department-select,
 .employee-select {
   padding: 10px 16px;
   border: 1px solid var(--border-color);
@@ -65,11 +79,12 @@
   font-size: 1rem;
   color: var(--text-primary);
   background-color: var(--bg-surface);
-  min-width: 250px;
+  min-width: 220px;
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.department-select:focus,
 .employee-select:focus {
   outline: none;
   border-color: var(--accent-primary);

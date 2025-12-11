@@ -280,21 +280,23 @@ export const convertToStructuredData = (rawData, type) => {
     return result
   }
 
-  // 自己評価・部長評価フォームの回答: B列が名前、D列〜CF列が回答（2行目からデータ）
+  // 自己評価・部長評価フォームの回答: B列が名前、C列が部署、D列〜CF列が回答（2行目からデータ）
   if (type === 'selfEvaluation' || type === 'managerEvaluation') {
     const result = {}
     // ヘッダー行(row 0)をスキップ、row 1から処理
     rawData.slice(1).forEach((row, idx) => {
       const name = String(row[1] || '').trim() // B列 = index 1
+      const department = String(row[2] || '').trim() // C列 = index 2 (部署)
       if (name && name !== '氏名' && name !== '名前') {
         // D列(index 3)からCF列までが回答データ
         const answers = row.slice(3)
         result[name] = {
           name: name,
+          department: department,
           answers: answers
         }
         if (idx < 3) {
-          console.log(`[convertToStructuredData] ${type}: ${name}, answers count: ${answers.length}, first 5:`, answers.slice(0, 5))
+          console.log(`[convertToStructuredData] ${type}: ${name}, dept: ${department}, answers count: ${answers.length}`)
         }
       }
     })
@@ -355,9 +357,12 @@ export const mergeEvaluationData = (masterData, selfData, managerData, scoreData
   allNames.forEach(name => {
     if (!name || name === '氏名' || name === '名前') return
 
+    // 部署情報はselfDataまたはmanagerDataから取得
+    const department = selfData?.[name]?.department || managerData?.[name]?.department || ''
+
     result[name] = {
       name: name,
-      department: '', // マスターから取得する場合は別途対応
+      department: department,
       selfAnswers: selfData?.[name]?.answers || [],
       managerAnswers: managerData?.[name]?.answers || [],
       totalScore: scoreData?.[name] || 0

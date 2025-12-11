@@ -12,7 +12,17 @@ const DEPARTMENT_COLORS = {
 }
 
 const Dashboard = ({ user, salesRanking }) => {
-  const [selectedTab, setSelectedTab] = useState('overall')
+  // ユーザーのアクセス可能なタブを取得
+  const accessibleTab = user.salesAccess?.tab || 'all'
+  const shouldFilterDept = user.salesAccess?.filterDept || false
+
+  const [selectedTab, setSelectedTab] = useState(() => {
+    // 部長の場合、アクセス可能なタブをデフォルトに
+    if (user.role === 'manager' && accessibleTab !== 'all') {
+      return accessibleTab
+    }
+    return 'overall'
+  })
 
   // 売上ランキングデータの取得
   const rankingData = useMemo(() => {
@@ -29,20 +39,33 @@ const Dashboard = ({ user, salesRanking }) => {
   const currentTabData = useMemo(() => {
     if (!rankingData) return null
 
-    // 部長の場合、自部署のみ表示
-    if (user.role === 'manager') {
-      const deptMap = {
-        '東京': 'tokyo',
-        '大阪': 'osaka',
-        '名古屋': 'nagoya',
-        '企画開発': 'kikakukaihatsu'
+    // 部長の場合の処理
+    if (user.role === 'manager' && accessibleTab !== 'all') {
+      // 指定されたタブのデータを取得
+      const data = rankingData[accessibleTab]
+      if (!data) return null
+
+      // 部署フィルタが必要な場合
+      if (shouldFilterDept && user.departments) {
+        // departmentsをフィルタ（該当部署のみ表示）
+        if (data.departments) {
+          const filteredDepts = data.departments.filter(dept =>
+            user.departments.some(userDept =>
+              dept.name === userDept || dept.name.includes(userDept)
+            )
+          )
+          return {
+            ...data,
+            departments: filteredDepts,
+            teamSummary: data.teamSummary // チームサマリーはそのまま
+          }
+        }
       }
-      const key = deptMap[user.department]
-      return rankingData[key] || null
+      return data
     }
 
     return rankingData[selectedTab] || null
-  }, [rankingData, selectedTab, user])
+  }, [rankingData, selectedTab, user, accessibleTab, shouldFilterDept])
 
   // 全体タブ用のデータ（配列）
   const overallData = useMemo(() => {
@@ -146,7 +169,7 @@ const Dashboard = ({ user, salesRanking }) => {
       </div>
 
       {/* タブナビゲーション */}
-      {user.role !== 'manager' && (
+      {(user.role !== 'manager' || accessibleTab === 'all') && (
         <div className="tab-navigation">
           <button
             className={`tab-btn ${selectedTab === 'overall' ? 'active' : ''}`}
@@ -178,6 +201,19 @@ const Dashboard = ({ user, salesRanking }) => {
           >
             企画開発
           </button>
+        </div>
+      )}
+
+      {/* 部長用：アクセス中のタブ表示 */}
+      {user.role === 'manager' && accessibleTab !== 'all' && (
+        <div className="tab-navigation manager-tab">
+          <span className="current-tab-label">
+            {accessibleTab === 'tokyo' && '東京'}
+            {accessibleTab === 'osaka' && '大阪'}
+            {accessibleTab === 'nagoya' && '名古屋'}
+            {accessibleTab === 'kikakukaihatsu' && '企画開発'}
+            {shouldFilterDept && ` (${user.departments?.join(', ')})`}
+          </span>
         </div>
       )}
 

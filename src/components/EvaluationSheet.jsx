@@ -12,7 +12,13 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
     if (!evaluationData || !user) return []
 
     // 全社アクセス権限がある場合
-    if (user.departments?.includes('全社') || user.role === 'president' || user.role === 'admin') {
+    // - 社長・管理者
+    // - departments に '全社' が含まれる
+    // - salesAccess.tab が 'all' の場合（manager8など）
+    if (user.departments?.includes('全社') ||
+        user.role === 'president' ||
+        user.role === 'admin' ||
+        user.salesAccess?.tab === 'all') {
       // 全社員の部署をユニークに取得
       const allDepts = new Set()
       Object.values(evaluationData).forEach(emp => {
@@ -87,8 +93,8 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
     // 部署でフィルタ
     if (selectedDepartment) {
       employees = employees.filter(emp => emp.department === selectedDepartment)
-    } else if (user.role === 'manager' && !user.departments?.includes('全社')) {
-      // 部署未選択時でも、アクセス可能な部署の社員のみ
+    } else if (user.role === 'manager' && !user.departments?.includes('全社') && user.salesAccess?.tab !== 'all') {
+      // 部署未選択時でも、アクセス可能な部署の社員のみ（全社アクセス権限がない場合）
       employees = employees.filter(emp =>
         accessibleDepartments.includes(emp.department)
       )

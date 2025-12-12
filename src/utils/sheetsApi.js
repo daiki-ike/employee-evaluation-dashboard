@@ -283,6 +283,15 @@ export const convertToStructuredData = (rawData, type) => {
   // 自己評価・部長評価フォームの回答: B列が名前、C列が部署、D列〜CF列が回答（2行目からデータ）
   if (type === 'selfEvaluation' || type === 'managerEvaluation') {
     const result = {}
+
+    // デバッグ: 全行のB列とC列を確認
+    console.log(`[convertToStructuredData] ${type}: rawData has ${rawData.length} rows`)
+    rawData.forEach((row, idx) => {
+      if (idx < 5) {
+        console.log(`[convertToStructuredData] ${type} row ${idx}: B="${row?.[1]}", C="${row?.[2]}"`)
+      }
+    })
+
     // ヘッダー行(row 0)をスキップ、row 1から処理
     rawData.slice(1).forEach((row, idx) => {
       const name = String(row[1] || '').trim() // B列 = index 1
@@ -295,12 +304,14 @@ export const convertToStructuredData = (rawData, type) => {
           department: department,
           answers: answers
         }
-        if (idx < 3) {
-          console.log(`[convertToStructuredData] ${type}: ${name}, dept: ${department}, answers count: ${answers.length}`)
-        }
+        // 全社員のログを出力
+        console.log(`[convertToStructuredData] ${type}: ${name}, dept: "${department}", answers count: ${answers.length}`)
       }
     })
-    console.log(`[convertToStructuredData] ${type}: ${Object.keys(result).length} employees`)
+    console.log(`[convertToStructuredData] ${type}: ${Object.keys(result).length} employees total`)
+    // 全員の部署を一覧表示
+    const allDepts = [...new Set(Object.values(result).map(e => e.department))]
+    console.log(`[convertToStructuredData] ${type}: departments found: ${JSON.stringify(allDepts)}`)
     return result
   }
 
@@ -339,9 +350,9 @@ export const convertToStructuredData = (rawData, type) => {
  */
 export const mergeEvaluationData = (masterData, selfData, managerData, scoreData) => {
   console.log('[mergeEvaluationData] Starting merge...')
-  console.log('[mergeEvaluationData] selfData keys:', Object.keys(selfData || {}).slice(0, 5))
-  console.log('[mergeEvaluationData] managerData keys:', Object.keys(managerData || {}).slice(0, 5))
-  console.log('[mergeEvaluationData] scoreData keys:', Object.keys(scoreData || {}).slice(0, 5))
+  console.log('[mergeEvaluationData] selfData keys:', Object.keys(selfData || {}))
+  console.log('[mergeEvaluationData] managerData keys:', Object.keys(managerData || {}))
+  console.log('[mergeEvaluationData] scoreData keys:', Object.keys(scoreData || {}))
 
   // 全社員名を収集
   const allNames = new Set([
@@ -350,7 +361,7 @@ export const mergeEvaluationData = (masterData, selfData, managerData, scoreData
     ...Object.keys(scoreData || {})
   ])
 
-  console.log('[mergeEvaluationData] All employee names:', [...allNames].slice(0, 10))
+  console.log('[mergeEvaluationData] All employee names:', [...allNames])
 
   const result = {}
 
@@ -367,9 +378,15 @@ export const mergeEvaluationData = (masterData, selfData, managerData, scoreData
       managerAnswers: managerData?.[name]?.answers || [],
       totalScore: scoreData?.[name] || 0
     }
+
+    // 各社員の部署情報をログ
+    console.log(`[mergeEvaluationData] ${name}: dept="${department}"`)
   })
 
   console.log('[mergeEvaluationData] Result:', Object.keys(result).length, 'employees')
+  // 全部署一覧
+  const allDepts = [...new Set(Object.values(result).map(e => e.department))]
+  console.log('[mergeEvaluationData] All departments in merged data:', allDepts)
 
   return result
 }

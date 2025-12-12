@@ -114,13 +114,13 @@ const Dashboard = ({ user, salesRanking }) => {
       const sortedData = [...overallData].sort((a, b) => (b.sales || 0) - (a.sales || 0))
       const top5 = sortedData.slice(0, 5)
       const others = sortedData.slice(5)
-      
+
       const data = top5.map(item => ({
         name: item.name,
         value: item.sales || 0,
         share: item.salesRatio || 0
       }))
-      
+
       if (others.length > 0) {
         const othersSales = others.reduce((sum, item) => sum + (item.sales || 0), 0)
         const othersShare = others.reduce((sum, item) => sum + (item.salesRatio || 0), 0)
@@ -128,7 +128,35 @@ const Dashboard = ({ user, salesRanking }) => {
       }
       return data
     } else {
-      // 他のタブ：チーム別サマリー
+      // 部長（manager1-7）でフィルタがある場合：部門内ランキングからシェアを計算
+      if (user.role === 'manager' && shouldFilterDept && deptKey && branchData?.departments?.length > 0) {
+        // フィルタされた部門のランキングデータを取得
+        const dept = branchData.departments[0] // フィルタ後は1部門のみ
+        if (dept && dept.rankings && dept.rankings.length > 0) {
+          const rankings = dept.rankings
+          const totalSales = rankings.reduce((sum, item) => sum + (item.sales || 0), 0)
+
+          // 上位5名 + その他
+          const sortedRankings = [...rankings].sort((a, b) => (b.sales || 0) - (a.sales || 0))
+          const top5 = sortedRankings.slice(0, 5)
+          const others = sortedRankings.slice(5)
+
+          const data = top5.map(item => ({
+            name: item.name,
+            value: item.sales || 0,
+            share: totalSales > 0 ? (item.sales || 0) / totalSales * 100 : 0
+          }))
+
+          if (others.length > 0) {
+            const othersSales = others.reduce((sum, item) => sum + (item.sales || 0), 0)
+            const othersShare = totalSales > 0 ? othersSales / totalSales * 100 : 0
+            data.push({ name: 'その他', value: othersSales, share: othersShare })
+          }
+          return data
+        }
+      }
+
+      // 社長・管理者・manager8：チーム別サマリー
       if (!branchData || !branchData.teamSummary) return []
       return branchData.teamSummary.map(item => ({
         name: item.team,
@@ -136,7 +164,7 @@ const Dashboard = ({ user, salesRanking }) => {
         share: item.salesRatio || 0
       }))
     }
-  }, [selectedTab, overallData, branchData])
+  }, [selectedTab, overallData, branchData, user, shouldFilterDept, deptKey])
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('ja-JP', {
@@ -260,7 +288,13 @@ const Dashboard = ({ user, salesRanking }) => {
         {/* 売上シェア円グラフ */}
         {shareData.length > 0 && (
           <div className="chart-section">
-            <h3>{selectedTab === 'overall' ? '売上シェア（全体内%）' : 'チーム別売上シェア'}</h3>
+            <h3>
+              {selectedTab === 'overall'
+                ? '売上シェア（全体内%）'
+                : (user.role === 'manager' && shouldFilterDept && deptKey)
+                  ? `売上シェア（${deptKey}内%）`
+                  : 'チーム別売上シェア'}
+            </h3>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie

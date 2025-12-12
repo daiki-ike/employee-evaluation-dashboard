@@ -25,6 +25,14 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
     const userDepts = user.departments || []
     const matchedDepts = new Set()
 
+    // デバッグ: 利用可能な部署を確認
+    const allAvailableDepts = new Set()
+    Object.values(evaluationData).forEach(emp => {
+      if (emp.department) allAvailableDepts.add(emp.department)
+    })
+    console.log('[EvaluationSheet] User departments:', userDepts)
+    console.log('[EvaluationSheet] Available departments in data:', [...allAvailableDepts])
+
     Object.values(evaluationData).forEach(emp => {
       if (!emp.department) return
 
@@ -34,21 +42,38 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
         return
       }
 
-      // 特殊ケース: 経理部は「経理部」を含む全部署（本社・支社問わず）
-      if (userDepts.some(d => d === '経理部' && emp.department.includes('経理部'))) {
+      // 特殊ケース: 経理部は「経理」を含む全部署（「経理部」「経理課」「本社経理」など）
+      if (userDepts.some(d => d === '経理部' && emp.department.includes('経理'))) {
         matchedDepts.add(emp.department)
         return
       }
 
-      // 通常ケース: 完全一致、プレフィックス一致、または部署名を含む
-      if (userDepts.some(d =>
-        emp.department === d ||
-        emp.department.startsWith(d) ||
-        emp.department.includes(d)
-      )) {
+      // 通常ケース: 双方向のマッチング
+      // - 完全一致
+      // - userDept が emp.department に含まれる（例: '制作1部' が '東京本社 制作1部' に含まれる）
+      // - emp.department が userDept に含まれる（例: '東京本社 制作1部' が '制作1' を含む）
+      if (userDepts.some(d => {
+        // 完全一致
+        if (emp.department === d) return true
+        // userDeptがemp.departmentに含まれる
+        if (emp.department.includes(d)) return true
+        // emp.departmentがuserDeptに含まれる
+        if (d.includes(emp.department)) return true
+        // 部署名の主要部分でマッチ（スペースで分割して最後の部分）
+        const deptParts = d.split(/[\s　]/)
+        const empDeptParts = emp.department.split(/[\s　]/)
+        const deptMain = deptParts[deptParts.length - 1]
+        const empDeptMain = empDeptParts[empDeptParts.length - 1]
+        if (deptMain && empDeptMain && (deptMain.includes(empDeptMain) || empDeptMain.includes(deptMain))) {
+          return true
+        }
+        return false
+      })) {
         matchedDepts.add(emp.department)
       }
     })
+
+    console.log('[EvaluationSheet] Matched departments:', [...matchedDepts])
 
     return [...matchedDepts].sort()
   }, [evaluationData, user])

@@ -11,23 +11,23 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
   const accessibleDepartments = useMemo(() => {
     if (!evaluationData || !user) return []
 
-    // 全社アクセス権限がある場合
-    // - 社長・管理者
-    // - departments に '全社' が含まれる
-    // - salesAccess.tab が 'all' の場合（manager8など）
+    // 全社アクセス権限がある場合（社長・管理者のみ）
     if (user.departments?.includes('全社') ||
         user.role === 'president' ||
-        user.role === 'admin' ||
-        user.salesAccess?.tab === 'all') {
+        user.role === 'admin') {
       // 全社員の部署をユニークに取得
       const allDepts = new Set()
       Object.values(evaluationData).forEach(emp => {
         if (emp.department) allDepts.add(emp.department)
       })
-      return [...allDepts].sort()
+      // 部署が空の社員も「未設定」として表示
+      const hasEmptyDept = Object.values(evaluationData).some(emp => !emp.department)
+      const result = [...allDepts].sort()
+      if (hasEmptyDept) result.push('未設定')
+      return result
     }
 
-    // 部長の場合、自分の担当部署のみ
+    // 部長の場合、自分の担当部署のみ（厳密マッチング）
     const userDepts = user.departments || []
     const matchedDepts = new Set()
 
@@ -42,40 +42,32 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
     Object.values(evaluationData).forEach(emp => {
       if (!emp.department) return
 
-      // 特殊ケース: 名古屋支社は「名古屋支社」を含む全部署
-      if (userDepts.some(d => d === '名古屋支社' && emp.department.includes('名古屋支社'))) {
-        matchedDepts.add(emp.department)
-        return
-      }
-
-      // 特殊ケース: 経理部は「経理」を含む全部署（「経理部」「経理課」「本社経理」など）
-      if (userDepts.some(d => d === '経理部' && emp.department.includes('経理'))) {
-        matchedDepts.add(emp.department)
-        return
-      }
-
-      // 通常ケース: 双方向のマッチング
-      // - 完全一致
-      // - userDept が emp.department に含まれる（例: '制作1部' が '東京本社 制作1部' に含まれる）
-      // - emp.department が userDept に含まれる（例: '東京本社 制作1部' が '制作1' を含む）
-      if (userDepts.some(d => {
-        // 完全一致
-        if (emp.department === d) return true
-        // userDeptがemp.departmentに含まれる
-        if (emp.department.includes(d)) return true
-        // emp.departmentがuserDeptに含まれる
-        if (d.includes(emp.department)) return true
-        // 部署名の主要部分でマッチ（スペースで分割して最後の部分）
-        const deptParts = d.split(/[\s　]/)
-        const empDeptParts = emp.department.split(/[\s　]/)
-        const deptMain = deptParts[deptParts.length - 1]
-        const empDeptMain = empDeptParts[empDeptParts.length - 1]
-        if (deptMain && empDeptMain && (deptMain.includes(empDeptMain) || empDeptMain.includes(deptMain))) {
-          return true
+      for (const userDept of userDepts) {
+        // 特殊ケース: 名古屋支社は「名古屋支社」を含む全部署
+        if (userDept === '名古屋支社' && emp.department.includes('名古屋支社')) {
+          matchedDepts.add(emp.department)
+          break
         }
-        return false
-      })) {
-        matchedDepts.add(emp.department)
+
+        // 特殊ケース: 経理部は「経理」を含む全部署
+        if (userDept === '経理部' && emp.department.includes('経理')) {
+          matchedDepts.add(emp.department)
+          break
+        }
+
+        // 通常ケース: 完全一致のみ
+        // 例: '東京本社 マネジメント部' === '東京本社 マネジメント部'
+        if (emp.department === userDept) {
+          matchedDepts.add(emp.department)
+          break
+        }
+
+        // userDeptがemp.departmentに完全に含まれる場合
+        // 例: userDept='東京本社 マネジメント部' が emp.department='東京本社 マネジメント部' に含まれる
+        if (emp.department.includes(userDept)) {
+          matchedDepts.add(emp.department)
+          break
+        }
       }
     })
 
@@ -92,9 +84,14 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
 
     // 部署でフィルタ
     if (selectedDepartment) {
-      employees = employees.filter(emp => emp.department === selectedDepartment)
-    } else if (user.role === 'manager' && !user.departments?.includes('全社') && user.salesAccess?.tab !== 'all') {
-      // 部署未選択時でも、アクセス可能な部署の社員のみ（全社アクセス権限がない場合）
+      if (selectedDepartment === '未設定') {
+        // 「未設定」が選ばれた場合、部署が空の社員を表示
+        employees = employees.filter(emp => !emp.department)
+      } else {
+        employees = employees.filter(emp => emp.department === selectedDepartment)
+      }
+    } else if (user.role === 'manager' && !user.departments?.includes('全社')) {
+      // 部署未選択時でも、アクセス可能な部署の社員のみ
       employees = employees.filter(emp =>
         accessibleDepartments.includes(emp.department)
       )

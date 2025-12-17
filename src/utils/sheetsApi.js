@@ -162,7 +162,7 @@ export const convertEvaluationToNumber = (evaluation) => {
   // 日本語評価（5段階）
   // 出来ている系 (5 or 4)
   if (evalStr.includes('出来ていた') || evalStr.includes('出来ている') ||
-      evalStr.includes('できていた') || evalStr.includes('できている')) {
+    evalStr.includes('できていた') || evalStr.includes('できている')) {
     if (evalStr.includes('やや') || evalStr.includes('少し')) {
       return 4 // やや出来ていた
     }
@@ -171,9 +171,9 @@ export const convertEvaluationToNumber = (evaluation) => {
 
   // 出来ていない系 (1 or 2) - より多くのパターンに対応
   if (evalStr.includes('出来ていな') || evalStr.includes('出来てな') ||
-      evalStr.includes('できていな') || evalStr.includes('できてな') ||
-      evalStr.includes('出来なかった') || evalStr.includes('できなかった') ||
-      evalStr.includes('出来ない') || evalStr.includes('できない')) {
+    evalStr.includes('できていな') || evalStr.includes('できてな') ||
+    evalStr.includes('出来なかった') || evalStr.includes('できなかった') ||
+    evalStr.includes('出来ない') || evalStr.includes('できない')) {
     if (evalStr.includes('やや') || evalStr.includes('少し') || evalStr.includes('あまり')) {
       return 2 // やや出来ていなかった
     }
@@ -244,8 +244,8 @@ export const convertToStructuredData = (rawData, type) => {
 
       // ヘッダー行チェック
       const isHeader = String(row[0] || '').includes('カテゴリ') ||
-                       String(row[1] || '').includes('設問') ||
-                       String(row[2] || '').includes('大項目')
+        String(row[1] || '').includes('設問') ||
+        String(row[2] || '').includes('大項目')
 
       // 審査内容(criteria)がある行のみを有効な設問として処理
       // criteriaが空の行はカテゴリ見出し行の可能性が高い
@@ -292,8 +292,22 @@ export const convertToStructuredData = (rawData, type) => {
       }
     })
 
-    // ヘッダー行(row 0)をスキップ、row 1から処理
-    rawData.slice(1).forEach((row, idx) => {
+    // ヘッダー行の判定（APIが既にヘッダーを除外している場合と、含んでいる場合があるため）
+    const firstRow = rawData[0]
+    let dataToProcess = rawData
+
+    if (firstRow && (
+      String(firstRow[0]).includes('タイムスタンプ') ||
+      String(firstRow[0]).toLowerCase().includes('timestamp')
+    )) {
+      console.log(`[convertToStructuredData] Header detected in ${type}, slicing first row.`)
+      dataToProcess = rawData.slice(1)
+    } else {
+      console.log(`[convertToStructuredData] No timestamp header detected in ${type} (first cell: ${firstRow ? firstRow[0] : 'empty'}), using all rows.`)
+    }
+
+    // データ行を処理
+    dataToProcess.forEach((row, idx) => {
       const name = String(row[1] || '').trim() // B列 = index 1
       const department = String(row[2] || '').trim() // C列 = index 2 (部署)
       if (name && name !== '氏名' && name !== '名前') {

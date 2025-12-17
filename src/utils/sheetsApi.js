@@ -441,7 +441,22 @@ export const convertToStructuredData = (rawData, type) => {
   } else if (type === 'selfEvaluation' || type === 'managerEvaluation') {
     // 自己評価・部長評価フォーム回答の変換
     // 構造: タイムスタンプ, 氏名, 部署, 設問1回答, 設問2回答, ...
-    return rawData.slice(1).map(row => ({
+    // ヘッダー行の判定（APIが既にヘッダーを除外している場合と、含んでいる場合があるため）
+    const firstRow = rawData[0]
+    let dataRows = rawData
+
+    // 1行目の1列目が「タイムスタンプ」や「Timestamp」の場合、それはヘッダーなので削除
+    if (firstRow && (
+      String(firstRow[0]).includes('タイムスタンプ') ||
+      String(firstRow[0]).toLowerCase().includes('timestamp')
+    )) {
+      console.log(`Header detected in ${type}, slicing first row.`)
+      dataRows = rawData.slice(1)
+    } else {
+      console.log(`No header detected in ${type} (first cell: ${firstRow ? firstRow[0] : 'empty'}), using all rows.`)
+    }
+
+    return dataRows.map(row => ({
       timestamp: row[0],
       name: row[1],
       department: row[2],

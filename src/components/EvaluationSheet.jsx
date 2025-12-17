@@ -1,16 +1,116 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { convertEvaluationToNumber } from '../utils/sheetsApi'
 import './EvaluationSheet.css'
 
 const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
+  const [selectedDepartment, setSelectedDepartment] = useState('')
   const [selectedEmployee, setSelectedEmployee] = useState('')
 
-  // 社員リストを取得（evaluationDataのキーから）
-  const employees = useMemo(() => {
+  // ユーザーがアクセス可能な部署リストを取得
+  const accessibleDepartments = useMemo(() => {
+    if (!evaluationData || !user) return []
+
+    // 全社アクセス権限がある場合（社長・管理者のみ）
+    if (user.departments?.includes('全社') ||
+        user.role === 'president' ||
+        user.role === 'admin') {
+      // 全社員の部署をユニークに取得
+      const allDepts = new Set()
+      Object.values(evaluationData).forEach(emp => {
+        if (emp.department) allDepts.add(emp.department)
+      })
+      // 部署が空の社員も「未設定」として表示
+      const hasEmptyDept = Object.values(evaluationData).some(emp => !emp.department)
+      const result = [...allDepts].sort()
+      if (hasEmptyDept) result.push('未設定')
+      return result
+    }
+
+    // 部長の場合、自分の担当部署のみ（厳密マッチング）
+    const userDepts = user.departments || []
+    const matchedDepts = new Set()
+
+    // デバッグ: 利用可能な部署を確認
+    const allAvailableDepts = new Set()
+    Object.values(evaluationData).forEach(emp => {
+      if (emp.department) allAvailableDepts.add(emp.department)
+    })
+    console.log('[EvaluationSheet] User departments:', userDepts)
+    console.log('[EvaluationSheet] Available departments in data:', [...allAvailableDepts])
+
+    Object.values(evaluationData).forEach(emp => {
+      if (!emp.department) return
+
+      for (const userDept of userDepts) {
+        // 特殊ケース: 名古屋支社は「名古屋支社」を含む全部署
+        if (userDept === '名古屋支社' && emp.department.includes('名古屋支社')) {
+          matchedDepts.add(emp.department)
+          break
+        }
+
+        // 特殊ケース: 経理部は「経理」を含む全部署
+        if (userDept === '経理部' && emp.department.includes('経理')) {
+          matchedDepts.add(emp.department)
+          break
+        }
+
+        // 通常ケース: 完全一致のみ
+        // 例: '東京本社 マネジメント部' === '東京本社 マネジメント部'
+        if (emp.department === userDept) {
+          matchedDepts.add(emp.department)
+          break
+        }
+
+        // userDeptがemp.departmentに完全に含まれる場合
+        // 例: userDept='東京本社 マネジメント部' が emp.department='東京本社 マネジメント部' に含まれる
+        if (emp.department.includes(userDept)) {
+          matchedDepts.add(emp.department)
+          break
+        }
+      }
+    })
+
+    console.log('[EvaluationSheet] Matched departments:', [...matchedDepts])
+
+    return [...matchedDepts].sort()
+  }, [evaluationData, user])
+
+  // 選択可能な社員リスト（部署フィルタ適用）
+  const filteredEmployees = useMemo(() => {
     if (!evaluationData) return []
-    return Object.keys(evaluationData).sort()
-  }, [evaluationData])
+
+    let employees = Object.values(evaluationData)
+
+    // 部署でフィルタ
+    if (selectedDepartment) {
+      if (selectedDepartment === '未設定') {
+        // 「未設定」が選ばれた場合、部署が空の社員を表示
+        employees = employees.filter(emp => !emp.department)
+      } else {
+        employees = employees.filter(emp => emp.department === selectedDepartment)
+      }
+    } else if (user.role === 'manager' && !user.departments?.includes('全社')) {
+      // 部署未選択時でも、アクセス可能な部署の社員のみ
+      employees = employees.filter(emp =>
+        accessibleDepartments.includes(emp.department)
+      )
+    }
+
+    return employees.map(emp => emp.name).sort()
+  }, [evaluationData, selectedDepartment, user, accessibleDepartments])
+
+  // 部署選択時に社員選択をリセット
+  useEffect(() => {
+    setSelectedEmployee('')
+  }, [selectedDepartment])
+
+  // 初回ロード時に最初の部署を選択（部長の場合）
+  useEffect(() => {
+    if (accessibleDepartments.length > 0 && !selectedDepartment && user.role === 'manager') {
+      setSelectedDepartment(accessibleDepartments[0])
+    }
+  }, [accessibleDepartments, selectedDepartment, user])
 
   // 選択された社員の評価データを整形（rowspan計算付き）
   const employeeEvaluation = useMemo(() => {
@@ -97,6 +197,13 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
     if (!employeeEvaluation) return null
 
     const evaluations = employeeEvaluation.evaluations
+    if (!evaluations || evaluations.length === 0) {
+      return {
+        avgDifference: '0.00',
+        maxDifference: '0.00',
+        questionCount: 0
+      }
+    }
     const avgDifference = evaluations.reduce((sum, item) => sum + Math.abs(item.difference), 0) / evaluations.length
     const maxDifference = Math.max(...evaluations.map(item => Math.abs(item.difference)))
 
@@ -201,17 +308,37 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
       </header>
 
       <div className="employee-selector">
-        <label>社員を選択</label>
-        <select
-          value={selectedEmployee}
-          onChange={(e) => setSelectedEmployee(e.target.value)}
-          className="employee-select"
-        >
-          <option value="">-- 社員を選択してください --</option>
-          {Object.keys(evaluationData).map(name => (
-            <option key={name} value={name}>{name}</option>
-          ))}
-        </select>
+        <div className="selector-group">
+          <label>部署を選択</label>
+          <select
+            value={selectedDepartment}
+            onChange={(e) => setSelectedDepartment(e.target.value)}
+            className="department-select"
+          >
+            {accessibleDepartments.length > 1 && (
+              <option value="">-- 全部署 --</option>
+            )}
+            {accessibleDepartments.map(dept => (
+              <option key={dept} value={dept}>{dept}</option>
+            ))}
+          </select>
+        </div>
+        <div className="selector-group">
+          <label>社員を選択</label>
+          <select
+            value={selectedEmployee}
+            onChange={(e) => setSelectedEmployee(e.target.value)}
+            className="employee-select"
+          >
+            <option value="">-- 社員を選択してください --</option>
+            {filteredEmployees.map(name => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+        </div>
+        <div className="selector-info">
+          <span>{filteredEmployees.length}名</span>
+        </div>
       </div>
 
       {!selectedEmployee ? (
@@ -231,7 +358,7 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
             </div>
             <div className="total-score">
               <span className="score-label">合計評価点</span>
-              <span className="score-value">{employeeEvaluation.totalScore.toFixed(2)}</span>
+              <span className="score-value">{(employeeEvaluation.totalScore || 0).toFixed(2)}</span>
             </div>
           </div>
 
@@ -254,26 +381,30 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
             <div className="legend-item">
               <h4>比較グラフの見方</h4>
               <div className="legend-row">
-                <span className="color-box self"></span>
+                <span className="legend-marker self">●</span>
                 <span>自己評価</span>
               </div>
               <div className="legend-row">
-                <span className="color-box manager"></span>
+                <span className="legend-marker manager">▲</span>
                 <span>部長評価</span>
+              </div>
+              <div className="legend-row">
+                <span className="legend-marker match">◆</span>
+                <span>一致</span>
               </div>
             </div>
             <div className="legend-item">
               <h4>乖離の意味</h4>
               <div className="legend-desc">
-                <span className="diff-example positive">+0.70</span>
+                <span className="diff-example positive">+2.0</span>
                 <span>自己評価の方が高い（自己評価過大の可能性）</span>
               </div>
               <div className="legend-desc">
-                <span className="diff-example negative">-0.70</span>
+                <span className="diff-example negative">-2.0</span>
                 <span>部長評価の方が高い（自己評価過小の可能性）</span>
               </div>
               <div className="legend-desc">
-                <span className="diff-example zero">0.00</span>
+                <span className="diff-example zero">0.0</span>
                 <span>自己評価と部長評価が一致</span>
               </div>
             </div>
@@ -330,18 +461,55 @@ const EvaluationSheet = ({ user, evaluationMaster, evaluationData }) => {
                       </span>
                     </td>
                     <td className="chart-cell">
-                      <div className="mini-chart">
-                        <div
-                          className="bar self"
-                          style={{ width: `${item.selfNumeric * 100}%` }}
-                          title={`自己: ${item.selfNumeric}`}
-                        ></div>
-                        <div
-                          className="bar manager"
-                          style={{ width: `${item.managerNumeric * 100}%` }}
-                          title={`部長: ${item.managerNumeric}`}
-                        ></div>
-                      </div>
+                      {(() => {
+                        // 0の場合は1として表示（スケール外にならないよう）
+                        const selfPos = Math.max(1, Math.min(5, item.selfNumeric))
+                        const mgrPos = Math.max(1, Math.min(5, item.managerNumeric))
+                        const selfLeft = (selfPos - 1) * 25
+                        const mgrLeft = (mgrPos - 1) * 25
+                        const minLeft = Math.min(selfLeft, mgrLeft)
+                        const gapWidth = Math.abs(selfLeft - mgrLeft)
+
+                        return (
+                          <div className="scale-chart">
+                            {/* スケールライン 1-5 */}
+                            <div className="scale-line">
+                              {[1, 2, 3, 4, 5].map(n => (
+                                <div key={n} className="scale-tick" style={{ left: `${(n - 1) * 25}%` }}>
+                                  <span className="tick-label">{n}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {/* マーカー表示 */}
+                            {selfPos === mgrPos ? (
+                              // 一致: ダイヤモンドマーカー
+                              <div
+                                className="marker match"
+                                style={{ left: `${selfLeft}%` }}
+                                title={`一致: ${item.selfNumeric}`}
+                              >◆</div>
+                            ) : (
+                              // 乖離あり: 2つのマーカーを線で結ぶ
+                              <>
+                                <div
+                                  className="gap-line"
+                                  style={{ left: `${minLeft}%`, width: `${gapWidth}%` }}
+                                />
+                                <div
+                                  className="marker self"
+                                  style={{ left: `${selfLeft}%` }}
+                                  title={`自己: ${item.selfNumeric}`}
+                                >●</div>
+                                <div
+                                  className="marker manager"
+                                  style={{ left: `${mgrLeft}%` }}
+                                  title={`部長: ${item.managerNumeric}`}
+                                >▲</div>
+                              </>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </td>
                   </tr>
                 ))}

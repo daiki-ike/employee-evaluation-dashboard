@@ -59,13 +59,13 @@ function App() {
   }
 
   return (
-    <Router>
+   <Router basename="/employee-evaluation-dashboard">
       <div className="App">
         {user && (
           <header className="app-header">
             <h1>社員評価ダッシュボード</h1>
             <div className="user-info">
-              <span>{user.role === 'manager' ? `部長 (${user.department})` : user.role === 'president' ? '社長' : '管理者'}</span>
+              <span>{user.role === 'manager' ? `部長 (${user.departments?.join(', ') || ''})` : user.role === 'president' ? '社長' : '管理者'}</span>
               <button onClick={handleLogout} className="logout-btn">ログアウト</button>
             </div>
           </header>

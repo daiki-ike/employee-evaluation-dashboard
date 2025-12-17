@@ -48,16 +48,30 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
   border: 1px solid var(--border-color);
   display: flex;
-  align-items: center;
-  gap: 16px;
+  align-items: flex-end;
+  gap: 24px;
+  flex-wrap: wrap;
 }
 
-.employee-selector label {
+.selector-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.selector-group label {
   font-weight: 600;
   color: var(--text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
+.selector-info {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  padding-bottom: 10px;
+}
+
+.department-select,
 .employee-select {
   padding: 10px 16px;
   border: 1px solid var(--border-color);
@@ -65,15 +79,26 @@
   font-size: 1rem;
   color: var(--text-primary);
   background-color: var(--bg-surface);
-  min-width: 250px;
+  min-width: 220px;
   cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.department-select:focus,
 .employee-select:focus {
   outline: none;
   border-color: var(--accent-primary);
   box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.15);
+}
+
+.no-employees-message {
+  margin-top: 16px;
+  padding: 12px 16px;
+  background: #FFF5F5;
+  border: 1px solid #FED7D7;
+  border-radius: 8px;
+  color: #C53030;
+  font-size: 0.9rem;
 }
 
 /* Employee Header Info */
@@ -198,6 +223,26 @@
 
 .color-box.manager {
   background-color: #48bb78;
+}
+
+/* Legend Markers */
+.legend-marker {
+  font-size: 1rem;
+  width: 20px;
+  text-align: center;
+  display: inline-block;
+}
+
+.legend-marker.self {
+  color: #805ad5;
+}
+
+.legend-marker.manager {
+  color: #48bb78;
+}
+
+.legend-marker.match {
+  color: #38A169;
 }
 
 .diff-example {
@@ -339,25 +384,18 @@
 }
 
 .score-text {
-  font-size: 0.75rem;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: keep-all;
   color: var(--text-secondary);
   margin-bottom: 4px;
   min-height: 1.2em;
-  /* Prevent layout shift */
 }
 
 .score-num {
   font-weight: 700;
   font-size: 1.1rem;
-}
-
-.score-text {
-  font-size: 0.9rem;
-  line-height: 1.4;
-  white-space: normal;
-  word-break: keep-all;
-  /* Try to keep words together */
-  margin-bottom: 4px;
 }
 
 /* Difference Badge */
@@ -396,6 +434,83 @@
   padding-right: 24px;
 }
 
+/* Scale Chart - スケールマーカー表示 */
+.scale-chart {
+  position: relative;
+  width: 120px;
+  height: 32px;
+}
+
+.scale-line {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #E2E8F0;
+  transform: translateY(-50%);
+}
+
+.scale-tick {
+  position: absolute;
+  top: -8px;
+  transform: translateX(-50%);
+}
+
+.scale-tick::before {
+  content: '';
+  display: block;
+  width: 2px;
+  height: 8px;
+  background: #CBD5E0;
+  margin: 0 auto 2px;
+}
+
+.tick-label {
+  font-size: 0.65rem;
+  color: #A0AEC0;
+  display: block;
+  text-align: center;
+}
+
+/* 乖離を示す線 */
+.gap-line {
+  position: absolute;
+  top: 50%;
+  height: 4px;
+  background: linear-gradient(90deg, #805ad5, #48bb78);
+  transform: translateY(-50%);
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+/* マーカー */
+.marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 14px;
+  z-index: 5;
+  cursor: default;
+}
+
+.marker.self {
+  color: #805ad5;
+  text-shadow: 0 0 2px white, 0 0 2px white;
+}
+
+.marker.manager {
+  color: #48bb78;
+  text-shadow: 0 0 2px white, 0 0 2px white;
+}
+
+.marker.match {
+  color: #38A169;
+  font-size: 16px;
+  text-shadow: 0 0 3px white, 0 0 3px white;
+}
+
+/* 旧スタイル（互換性のため残す） */
 .mini-chart {
   display: flex;
   flex-direction: column;

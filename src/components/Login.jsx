@@ -3,30 +3,63 @@ import './Login.css'
 
 const Login = ({ onLogin }) => {
   const [password, setPassword] = useState('')
-  const [selectedDepartment, setSelectedDepartment] = useState('')
-  const [showDepartmentSelect, setShowDepartmentSelect] = useState(false)
   const [error, setError] = useState('')
 
   // パスワード設定（実際の運用では環境変数などで管理）
+  // departments: 評価シートで閲覧可能な部署
+  // salesAccess: 売上ダッシュボードでのアクセス権限
   const passwords = {
-    manager1: { role: 'manager', department: '営業1部' },
-    manager2: { role: 'manager', department: '営業2部' },
-    manager3: { role: 'manager', department: '営業3部' },
-    manager4: { role: 'manager', department: '営業4部' },
-    manager5: { role: 'manager', department: '営業5部' },
-    manager6: { role: 'manager', department: '営業6部' },
-    president2025: { role: 'president', department: '全社' },
-    admin2025: { role: 'admin', department: '全社' }
+    manager1: {
+      role: 'manager',
+      departments: ['東京本社 マネジメント部'],
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: 'マネジメント' }
+    },
+    manager2: {
+      role: 'manager',
+      departments: ['東京本社 制作1部'],
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: '制作1' }
+    },
+    manager3: {
+      role: 'manager',
+      departments: ['東京本社 制作2部'],
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: '制作2' }
+    },
+    manager4: {
+      role: 'manager',
+      departments: ['東京本社 制作3部'],
+      salesAccess: { tab: 'tokyo', filterDept: true, deptKey: '制作3' }
+    },
+    manager5: {
+      role: 'manager',
+      departments: ['東京本社 企画開発/人事部', '沖縄支社 企画開発/人事部'],
+      salesAccess: { tab: 'kikakukaihatsu', filterDept: false }
+    },
+    manager6: {
+      role: 'manager',
+      departments: ['名古屋支社'],  // 名古屋支社の全部署
+      salesAccess: { tab: 'nagoya', filterDept: false }
+    },
+    manager7: {
+      role: 'manager',
+      departments: ['大阪支社 マネジメント部', '大阪支社 キャスティング部'],
+      salesAccess: { tab: 'osaka', filterDept: true }
+    },
+    manager8: {
+      role: 'manager',
+      departments: ['経理部'],
+      salesAccess: { tab: 'all', filterDept: false }  // 社長と同じ権限
+    },
+    president2025: {
+      role: 'president',
+      departments: ['全社'],
+      salesAccess: { tab: 'all', filterDept: false }
+    },
+    admin2025: {
+      role: 'admin',
+      departments: ['全社'],
+      salesAccess: { tab: 'all', filterDept: false }
+    }
   }
-
-  const departments = [
-    '営業1部',
-    '営業2部',
-    '営業3部',
-    '営業4部',
-    '営業5部',
-    '営業6部'
-  ]
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -35,13 +68,7 @@ const Login = ({ onLogin }) => {
     const userInfo = passwords[password]
 
     if (userInfo) {
-      if (userInfo.role === 'manager') {
-        // 部長の場合、パスワードに紐づいた部署で自動ログイン
-        onLogin(userInfo)
-      } else {
-        // 社長・管理者の場合、そのままログイン
-        onLogin(userInfo)
-      }
+      onLogin(userInfo)
     } else {
       setError('パスワードが正しくありません')
     }
@@ -74,7 +101,7 @@ const Login = ({ onLogin }) => {
         <div className="login-info">
           <p>アカウント種別:</p>
           <ul>
-            <li>部長アカウント (6種類)</li>
+            <li>部長アカウント (8種類)</li>
             <li>社長アカウント</li>
             <li>管理者アカウント</li>
           </ul>

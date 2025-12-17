@@ -1,38 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { fetchSheetData, convertToStructuredData, mergeEvaluationData } from '../utils/sheetsApi'
-import { fetchAllSalesSheets } from '../utils/salesApi'
+import { SHEET_CONFIG } from '../config/sheetConfig'
 import './DataUpload.css'
 
-const DataUpload = ({ onUpload }) => {
+const DataUpload = ({ onUpload, isAutoFetching, onManualReload }) => {
   const navigate = useNavigate()
-
-  // 売上データ
-  const [salesUrl, setSalesUrl] = useState('https://docs.google.com/spreadsheets/d/1ySCbLFCgnnLgEQUszfBc5BubkXwH3P4kDbLJnibgn1M/edit?usp=sharing')
-
-  // 評価マスター
-  const [masterUrl, setMasterUrl] = useState('https://docs.google.com/spreadsheets/d/1xi024jxqTOmta-iABi3IuCPv718Y0EBBfESSke9K94c/edit?usp=sharing')
-  const [masterSheetName, setMasterSheetName] = useState('シート1')
-
-  // 自己評価フォーム
-  const [selfEvalUrl, setSelfEvalUrl] = useState('https://docs.google.com/spreadsheets/d/1Dgk5tzbb1ugMwO9Aj14TsSmHlgXeFR1ixZtb1jVRDc8/')
-  const [selfEvalSheetName, setSelfEvalSheetName] = useState('フォームの回答 1')
-
-  // 部長評価フォーム
-  const [managerEvalUrl, setManagerEvalUrl] = useState('https://docs.google.com/spreadsheets/d/1Dgk5tzbb1ugMwO9Aj14TsSmHlgXeFR1ixZtb1jVRDc8/')
-  const [managerEvalSheetName, setManagerEvalSheetName] = useState('フォームの回答_部長')
-
-  // 合計評点
-  const [totalScoreUrl, setTotalScoreUrl] = useState('https://docs.google.com/spreadsheets/d/1Dgk5tzbb1ugMwO9Aj14TsSmHlgXeFR1ixZtb1jVRDc8/')
-  const [totalScoreSheetName, setTotalScoreSheetName] = useState('計算_部長')
-
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
-
-  // ページ読み込み時にメッセージをクリア
-  useEffect(() => {
-    setMessage('')
-  }, [])
 
   // localStorage からデータ件数を取得する関数
   const getSalesCount = () => {
@@ -70,119 +44,33 @@ const DataUpload = ({ onUpload }) => {
     }
   }
 
-  const handleUploadSales = async () => {
-    setLoading(true)
-    setMessage('')
-
-    try {
-      console.log('[DataUpload] Starting sales upload...')
-      const salesData = await fetchAllSalesSheets(salesUrl)
-
-      console.log('[DataUpload] salesData received:', salesData)
-      onUpload('salesRanking', salesData)
-
-      const totalRecords = (salesData.overall?.length || 0) +
-        (salesData.tokyo?.length || 0) +
-        (salesData.osaka?.length || 0) +
-        (salesData.nagoya?.length || 0) +
-        (salesData.kikakukaihatsu?.length || 0)
-
-      console.log('[DataUpload] totalRecords:', totalRecords)
-      
-      if (totalRecords > 0) {
-        setMessage(`✅ 売上ランキングデータを読み込みました（全${totalRecords}件）`)
-      } else {
-        setMessage('⚠️ データが見つかりませんでした。スプレッドシートの形式を確認してください。')
-      }
-    } catch (error) {
-      console.error('[DataUpload] Error:', error)
-      setMessage(`❌ エラー: ${error.message}`)
-    } finally {
+  const handleManualReload = async () => {
+    if (onManualReload) {
+      setLoading(true)
+      await onManualReload()
       setLoading(false)
-    }
-  }
-
-  const handleUploadEvaluation = async () => {
-    if (!masterUrl || !masterSheetName || !selfEvalUrl || !selfEvalSheetName ||
-      !managerEvalUrl || !managerEvalSheetName || !totalScoreUrl || !totalScoreSheetName) {
-      setMessage('⚠️ すべての評価データのURLとシート名を入力してください')
-      return
-    }
-
-    setLoading(true)
-    setMessage('')
-
-    try {
-      // 各シートを個別に取得（1つが失敗しても他は続行）
-      const results = await Promise.allSettled([
-        fetchSheetData(masterUrl, masterSheetName),
-        fetchSheetData(selfEvalUrl, selfEvalSheetName),
-        fetchSheetData(managerEvalUrl, managerEvalSheetName),
-        fetchSheetData(totalScoreUrl, totalScoreSheetName)
-      ])
-
-      const sheetNames = ['評価マスター', '自己評価', '部長評価', '合計評点']
-      const errors = []
-      const successData = []
-
-      results.forEach((result, idx) => {
-        if (result.status === 'fulfilled') {
-          successData[idx] = result.value
-          console.log(`[handleUploadEvaluation] ${sheetNames[idx]}: ${result.value.length} rows`)
-        } else {
-          errors.push(`${sheetNames[idx]}: ${result.reason.message}`)
-          successData[idx] = []
-          console.error(`[handleUploadEvaluation] ${sheetNames[idx]} failed:`, result.reason)
-        }
-      })
-
-      const [masterRaw, selfRaw, managerRaw, scoreRaw] = successData
-
-      const masterData = convertToStructuredData(masterRaw, 'evaluationMaster')
-      const selfData = convertToStructuredData(selfRaw, 'selfEvaluation')
-      const managerData = convertToStructuredData(managerRaw, 'managerEvaluation')
-      const scoreData = convertToStructuredData(scoreRaw, 'totalScore')
-
-      console.log('[handleUploadEvaluation] masterData:', masterData.length, 'questions')
-      console.log('[handleUploadEvaluation] selfData:', Object.keys(selfData).length, 'employees')
-      console.log('[handleUploadEvaluation] managerData:', Object.keys(managerData).length, 'employees')
-      console.log('[handleUploadEvaluation] scoreData:', Object.keys(scoreData).length, 'employees')
-
-      const mergedData = mergeEvaluationData(masterData, selfData, managerData, scoreData)
-
-      onUpload('evaluationMaster', masterData)
-      onUpload('evaluationData', mergedData)
-
-      if (errors.length > 0) {
-        setMessage(`⚠️ 一部読み込み失敗:\n${errors.join('\n')}\n\n成功: マスター${masterData.length}問, 社員${Object.keys(mergedData).length}名`)
-      } else {
-        setMessage(`✅ 評価データ読み込み完了: マスター${masterData.length}問, 社員${Object.keys(mergedData).length}名`)
-      }
-    } catch (error) {
-      setMessage(`❌ エラー: ${error.message}`)
-      console.error('Evaluation upload error:', error)
-    } finally {
-      setLoading(false)
+      setMessage('✅ データの再読み込みが完了しました')
+      setTimeout(() => setMessage(''), 3000)
     }
   }
 
   return (
     <div className="data-upload-container">
-      <h2>データアップロード</h2>
+      <h2>データ接続ステータス</h2>
       <p className="upload-description">
-        Google スプレッドシートのURLとシート名を入力してデータを読み込みます。<br />
-        ※スプレッドシートは「リンクを知っている全員が閲覧可能」に設定してください。
+        現在設定されているGoogleスプレッドシートから自動的にデータを読み込んでいます。<br />
+        データが反映されていない場合は、「手動更新」ボタンを押してください。
       </p>
 
-      {message && (
-        <div className={`message ${message.includes('エラー') || message.includes('❌') ? 'error' : message.includes('⚠️') ? 'warning' : 'success'}`}>
-          {message}
+      {(message || isAutoFetching) && (
+        <div className={`message ${isAutoFetching ? 'info' : message.includes('エラー') ? 'error' : 'success'}`}>
+          {isAutoFetching ? '🔄 スプレッドシートから最新データを取得中...' : message}
         </div>
       )}
 
       {/* データビューア */}
       <div className="data-viewer-section">
-        <h3>📊 現在読み込まれているデータ</h3>
+        <h3>📊 現在のデータ状況</h3>
         <div className="data-viewer-grid">
           <div className="data-viewer-card">
             <span className="data-label">売上ランキング</span>
@@ -199,7 +87,19 @@ const DataUpload = ({ onUpload }) => {
             <span className="data-sub">4シート統合</span>
           </div>
         </div>
+
         <div className="data-viewer-actions">
+          <button
+            onClick={handleManualReload}
+            className="upload-btn sales-btn"
+            disabled={loading || isAutoFetching}
+            style={{ width: 'auto', padding: '0.8rem 2rem', fontSize: '1rem' }}
+          >
+            {loading || isAutoFetching ? '更新中...' : '🔄 最新データを手動更新'}
+          </button>
+        </div>
+
+        <div className="data-viewer-actions" style={{ marginTop: '1rem' }}>
           <button onClick={() => navigate('/dashboard')} className="view-dashboard-btn">
             📊 ダッシュボードを確認
           </button>
@@ -209,128 +109,32 @@ const DataUpload = ({ onUpload }) => {
         </div>
       </div>
 
-      {/* 売上ランキングデータ */}
-      <div className="upload-section">
-        <h3>📈 売上ランキングデータ</h3>
+      {/* 設定情報（参照のみ） */}
+      <div className="upload-section collapsed">
+        <h3>⚙️ 接続設定（書き換え不可）</h3>
         <p className="section-description">
-          全体・東京・大阪・名古屋・企画開発の5シートからデータを読み込みます
-        </p>
-        <div className="input-group">
-          <label>スプレッドシートURL</label>
-          <input
-            type="text"
-            value={salesUrl}
-            onChange={(e) => setSalesUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-          />
-        </div>
-        <button
-          onClick={handleUploadSales}
-          disabled={loading || !salesUrl}
-          className="upload-btn sales-btn"
-        >
-          {loading ? '読み込み中...' : '売上ランキングデータを読み込む'}
-        </button>
-      </div>
-
-      {/* 評価データ */}
-      <div className="upload-section">
-        <h3>📋 評価データ</h3>
-        <p className="section-description">
-          評価マスター・自己評価・部長評価・合計評点の4シートからデータを読み込みます
+          本番用スプレッドシートへの接続設定です。変更する場合はシステム管理者に連絡してください。
         </p>
 
-        <div className="input-row">
-          <div className="input-group">
-            <label>評価マスター URL</label>
-            <input
-              type="text"
-              value={masterUrl}
-              onChange={(e) => setMasterUrl(e.target.value)}
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-            />
+        <div className="config-display">
+          <div className="config-item">
+            <label>売上データURL</label>
+            <input type="text" value={SHEET_CONFIG.SALES.URL} readOnly className="readonly-input" />
           </div>
-          <div className="input-group small">
-            <label>シート名</label>
-            <input
-              type="text"
-              value={masterSheetName}
-              onChange={(e) => setMasterSheetName(e.target.value)}
-              placeholder="シート1"
-            />
+          <div className="config-item">
+            <label>評価マスターURL</label>
+            <input type="text" value={SHEET_CONFIG.EVALUATION.URL} readOnly className="readonly-input" />
           </div>
-        </div>
-
-        <div className="input-row">
-          <div className="input-group">
-            <label>自己評価フォーム URL</label>
-            <input
-              type="text"
-              value={selfEvalUrl}
-              onChange={(e) => setSelfEvalUrl(e.target.value)}
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-            />
-          </div>
-          <div className="input-group small">
-            <label>シート名</label>
-            <input
-              type="text"
-              value={selfEvalSheetName}
-              onChange={(e) => setSelfEvalSheetName(e.target.value)}
-              placeholder="フォームの回答1"
-            />
+          <div className="config-item">
+            <label>対象シート名</label>
+            <div className="tags">
+              {SHEET_CONFIG.SALES.SHEET_NAMES.map(n => <span key={n} className="tag sales">{n}</span>)}
+              <span className="tag eval">{SHEET_CONFIG.EVALUATION.SHEETS.MASTER.NAME}</span>
+              <span className="tag eval">{SHEET_CONFIG.EVALUATION.SHEETS.SELF_EVAL.NAME}</span>
+              <span className="tag eval">{SHEET_CONFIG.EVALUATION.SHEETS.MANAGER_EVAL.NAME}</span>
+            </div>
           </div>
         </div>
-
-        <div className="input-row">
-          <div className="input-group">
-            <label>部長評価フォーム URL</label>
-            <input
-              type="text"
-              value={managerEvalUrl}
-              onChange={(e) => setManagerEvalUrl(e.target.value)}
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-            />
-          </div>
-          <div className="input-group small">
-            <label>シート名</label>
-            <input
-              type="text"
-              value={managerEvalSheetName}
-              onChange={(e) => setManagerEvalSheetName(e.target.value)}
-              placeholder="フォームの回答_部長"
-            />
-          </div>
-        </div>
-
-        <div className="input-row">
-          <div className="input-group">
-            <label>合計評点 URL</label>
-            <input
-              type="text"
-              value={totalScoreUrl}
-              onChange={(e) => setTotalScoreUrl(e.target.value)}
-              placeholder="https://docs.google.com/spreadsheets/d/..."
-            />
-          </div>
-          <div className="input-group small">
-            <label>シート名</label>
-            <input
-              type="text"
-              value={totalScoreSheetName}
-              onChange={(e) => setTotalScoreSheetName(e.target.value)}
-              placeholder="計算_部長"
-            />
-          </div>
-        </div>
-
-        <button
-          onClick={handleUploadEvaluation}
-          disabled={loading}
-          className="upload-btn evaluation-btn"
-        >
-          {loading ? '読み込み中...' : '評価データを読み込む（4シート統合）'}
-        </button>
       </div>
     </div>
   )

@@ -44,13 +44,37 @@ body {
 }
 
 .app-header {
-  background: white;
-  padding: 15px 30px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0;
+  padding: 1rem 2rem;
+  background-color: white;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.header-status {
+  flex: 1;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.loading-status {
+  color: #4299e1;
+  animation: pulse 1.5s infinite;
+}
+
+.error-status {
+  color: #e53e3e;
+  font-weight: bold;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
 }
 
 .app-header h1 {

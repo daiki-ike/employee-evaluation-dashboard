@@ -14,7 +14,7 @@ export const SHEET_CONFIG = {
         URL: 'https://docs.google.com/spreadsheets/d/1OB2PpMwig1QGImOMf8m46LyOP8g_WaAFrgXLw1fa62g/edit?usp=sharing',
         SHEETS: {
             MASTER: {
-                NAME: 'シート1', // 評価マスター
+                NAME: '評価マスターシート', // 評価マスター
                 TYPE: 'evaluationMaster'
             },
             SELF_EVAL: {
